@@ -1,0 +1,52 @@
+wasp-bot/
+│
+├── src/                     # Source code for the library
+│   │
+│   ├── core/                 # Core engine and scheduling
+│   │   ├── clock.ts          # Event/tick scheduling system
+│   │   ├── events.ts         # Event bus & typings
+│   │   ├── logger.ts         # Logging utility
+│   │   ├── state-manager.ts  # Shared bot state
+│   │
+│   ├── connectors/           # Exchange connectors
+│   │   ├── base-connector.ts # Common interface for connectors
+│   │   ├── binance.ts        # Example CEX implementation
+│   │   ├── kucoin.ts
+│   │   └── uniswap.ts        # DEX example
+│   │
+│   ├── strategies/           # Custom trading strategies
+│   │   ├── base-strategy.ts  # Interface & shared functionality
+│   │   ├── ping-pong.ts
+│   │   ├── trend-following.ts
+│   │   └── arbitrage.ts
+│   │
+│   ├── market-data/          # Order book, ticker, candles
+│   │   ├── order-book.ts
+│   │   ├── ticker.ts
+│   │   └── candles.ts
+│   │
+│   ├── order-management/     # Order placement and tracking
+│   │   ├── order.ts
+│   │   ├── order-manager.ts
+│   │   └── position.ts
+│   │
+│   ├── utils/                # Helper functions & utilities
+│   │   ├── http-client.ts
+│   │   ├── ws-client.ts
+│   │   └── math.ts
+│   │
+│   └── index.ts              # Main entry point for the library
+│
+├── tests/                    # Unit & integration tests
+│   ├── connectors.test.ts
+│   ├── strategies.test.ts
+│   └── order-manager.test.ts
+│
+├── examples/                 # Example usage scripts
+│   ├── simple-binance-bot.ts
+│   └── arbitrage-bot.ts
+│
+├── package.json
+├── tsconfig.json
+├── README.md
+└── LICENSE
