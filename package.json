@@ -64,11 +64,7 @@
   },
   "dependencies": {
     "axios": "^1.5.0",
-<<<<<<< HEAD
     "decimal.js": "^10.6.0",
-=======
-    "decimal.js": "^10.4.3",
->>>>>>> ec5355a (feat: enhance project structure and configuration)
     "dotenv": "^16.3.1",
     "eventemitter3": "^5.0.1",
     "uuid": "^9.0.1",
