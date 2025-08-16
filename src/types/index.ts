@@ -13,6 +13,7 @@ export * from './market';
 
 // TODO: Add additional type modules as they are implemented
 // Future type modules to be added:
+
 // export * from './orders';     // Order management types (Issue #5)
 // export * from './connector';  // Exchange connector interfaces (Issue #6)
 // export * from './strategy';   // Trading strategy interfaces (Issue #7)
@@ -23,5 +24,8 @@ export * from './market';
 export const WASPBOT_VERSION = '0.1.0';
 export const API_VERSION = 'v1';
 
-// Re-export Decimal for convenience (DecimalAmount is already defined in common.ts)
+// Re-export Decimal class for runtime
 export { Decimal } from 'decimal.js';
+
+// Re-export Decimal type for typing convenience
+export type { Decimal as DecimalType } from 'decimal.js';
