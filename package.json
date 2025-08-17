@@ -62,7 +62,6 @@
     "dotenv": "^16.3.1",
     "eventemitter3": "^5.0.1",
     "uuid": "^9.0.1"
-
   },
   "lint-staged": {
     "src/**/*.{ts,tsx}": [

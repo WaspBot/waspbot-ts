@@ -8,9 +8,12 @@
 // Export common types and utilities
 export * from './common';
 
+// Export market data types (Phase 2 - Issue #4)
+export * from './market';
+
 // TODO: Add additional type modules as they are implemented
 // Future type modules to be added:
-// export * from './market';     // Market data types (Issue #4)
+
 // export * from './orders';     // Order management types (Issue #5)
 // export * from './connector';  // Exchange connector interfaces (Issue #6)
 // export * from './strategy';   // Trading strategy interfaces (Issue #7)
@@ -21,5 +24,8 @@ export * from './common';
 export const WASPBOT_VERSION = '0.1.0';
 export const API_VERSION = 'v1';
 
-// Type utility exports for convenience
-export type { Decimal } from 'decimal.js';
+// Re-export Decimal class for runtime
+export { Decimal } from 'decimal.js';
+
+// Re-export Decimal type for typing convenience
+export type { Decimal as DecimalType } from 'decimal.js';
