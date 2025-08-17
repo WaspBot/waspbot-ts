@@ -142,3 +142,5 @@ logs
 /logs/
 *.db
 *.sqlite
+GAME_PLAN.md
+INITIAL_ISSUES.md
