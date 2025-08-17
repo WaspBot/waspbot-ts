@@ -12,7 +12,9 @@ export type OrderId = string;
 export type TradeId = string;
 export type StrategyId = string;
 
-// Decimal type for precise financial calculations
+// Financial primitives using Decimal for precision
+export type Price = Decimal;
+export type Quantity = Decimal;
 export type DecimalAmount = Decimal;
 
 // Event types
@@ -165,4 +167,19 @@ export interface PerformanceMetrics {
   latency?: number;
   throughput?: number;
   errorRate?: number;
+}
+
+// Fee structure for trades and orders
+export interface Fee {
+  /** Fee amount */
+  amount: DecimalAmount;
+  
+  /** Asset that the fee is paid in */
+  asset: string;
+  
+  /** Fee type (maker, taker, gas, etc.) */
+  type: 'MAKER' | 'TAKER' | 'GAS' | 'WITHDRAWAL' | 'DEPOSIT' | 'FUNDING';
+  
+  /** Whether fee is added to cost or deducted from proceeds */
+  addedToCost: boolean;
 }
