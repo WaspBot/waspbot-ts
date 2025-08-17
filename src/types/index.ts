@@ -12,10 +12,10 @@ export * from './common';
 export * from './market';
 
 // Export order management types (Phase 3 - Issues #5-#9)
-export * from './orders-basic';  // Issue #5: Core order types and lifecycle
+export * from './orders-basic'; // Issue #5: Core order types and lifecycle
+export * from './orders-portfolio'; // Issue #6: Portfolio and position management
 
 // TODO: Add remaining order management modules
-// export * from './orders-portfolio';    // Issue #6: Portfolio and position management
 // export * from './orders-management';   // Issue #7: Order management services
 // export * from './orders-validation';   // Issue #8: Risk management and validation
 // export * from './orders';              // Issue #9: Final consolidated module
