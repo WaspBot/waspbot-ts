@@ -11,14 +11,16 @@ export * from './common';
 // Export market data types (Phase 2 - Issue #4)
 export * from './market';
 
-// TODO: Add additional type modules as they are implemented
-// Future type modules to be added:
+// Export order management types (Phase 3 - Issues #5-#9)
+export * from './orders-basic';  // Issue #5: Core order types and lifecycle
 
-// export * from './orders';     // Order management types (Issue #5)
-// export * from './connector';  // Exchange connector interfaces (Issue #6)
-// export * from './strategy';   // Trading strategy interfaces (Issue #7)
-// export * from './events';     // Event system types (Issue #8)
-// export * from './config';     // Configuration types (Issue #9)
+// TODO: Add remaining order management modules
+// export * from './orders-portfolio';    // Issue #6: Portfolio and position management
+// export * from './orders-management';   // Issue #7: Order management services
+// export * from './orders-validation';   // Issue #8: Risk management and validation
+// export * from './orders';              // Issue #9: Final consolidated module
+
+// TODO: Add additional type modules as they are implemented
 
 // Version information
 export const WASPBOT_VERSION = '0.1.0';
