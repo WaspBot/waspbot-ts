@@ -88,6 +88,10 @@ dist
 # Serverless directories
 .serverless/
 
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+GAME_PLAN.md
+INITIAL_ISSUES.md
 # FuseBox cache
 .fusebox/
 
