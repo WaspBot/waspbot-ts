@@ -11,6 +11,7 @@ import { BaseEvent, EventPriority } from './events.js';
 // Event Queue with Priority Support
 // ============================================================================
 
+
 /**
  * Event queue item with priority support
  */
