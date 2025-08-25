@@ -13,7 +13,7 @@ import {
   DecimalAmount,
   TradingSide,
   HealthStatus,
-} from './common';
+} from './common.js';
 
 // ============================================================================
 // Basic Market Data Types
