@@ -78,6 +78,20 @@ class EventQueue {
   public clear(): void {
     this.queue = [];
   }
+
+  /**
+   * Peek lowest-priority (FIFO within same priority)
+   */
+  public peekLowest(): QueuedEvent | undefined {
+    return this.queue[this.queue.length - 1];
+  }
+
+  /**
+   * Remove and return the lowest-priority item
+   */
+  public popLowest(): QueuedEvent | undefined {
+    return this.queue.pop();
+  }
 }
 
 // ============================================================================
@@ -219,23 +233,30 @@ export class EventDispatcher extends EventEmitter {
   /**
    * Emit an event to all subscribers
    */
-  public async emitEvent(eventType: string, event: BaseEvent): Promise<boolean> {
-    // Add to priority queue first
+  public async emitEvent(event: BaseEvent): Promise<boolean> {
+    // Enforce max queue size with priority-aware drop policy
+    if (this.eventQueue.size() >= this.config.maxQueueSize) {
+      const lowest = this.eventQueue.peekLowest();
+      if (!lowest || lowest.priority > event.priority) {
+        // Drop incoming low-priority event
+        return this.hasListeners(event.type);
+      }
+      // Drop current lowest-priority queued event to make room
+      this.eventQueue.popLowest();
+    }
     this.eventQueue.enqueue(event);
 
-    // Process queue if not already processing
     if (!this.processing) {
       await this.processQueue();
     }
-
-    return this.hasListeners(eventType);
+    return this.hasListeners(event.type);
   }
 
   /**
    * Emit an event synchronously (immediate processing)
    */
-  public emitSync(eventType: string, event: BaseEvent): boolean {
-    const listeners = this.getListeners(eventType);
+  public emitSync(event: BaseEvent): boolean {
+    const listeners = this.getListeners(event.type);
 
     if (listeners.length === 0) {
       return false;
@@ -249,11 +270,11 @@ export class EventDispatcher extends EventEmitter {
         // Handle async results
         if (result instanceof Promise) {
           result.catch(error => {
-            console.error(`Async error in listener for ${eventType}:`, error);
+            console.error(`Async error in listener for ${event.type}:`, error);
           });
         }
       } catch (error) {
-        console.error(`Error in listener for ${eventType}:`, error);
+        console.error(`Error in listener for ${event.type}:`, error);
       }
     }
 
@@ -263,11 +284,21 @@ export class EventDispatcher extends EventEmitter {
   /**
    * Emit multiple events in batch
    */
-  public async emitBatch(events: Array<{ type: string; event: BaseEvent }>): Promise<void> {
-    for (const { event } of events) {
-      this.eventQueue.enqueue(event);
+  public async emitBatch(events: BaseEvent[]): Promise<void> {
+    for (const event of events) {
+      if (this.eventQueue.size() >= this.config.maxQueueSize) {
+        const lowest = this.eventQueue.peekLowest();
+        if (lowest && lowest.priority <= event.priority) {
+          this.eventQueue.popLowest();
+          this.eventQueue.enqueue(event);
+        } else {
+          // drop incoming if it's not higher priority
+          continue;
+        }
+      } else {
+        this.eventQueue.enqueue(event);
+      }
     }
-
     if (!this.processing) {
       await this.processQueue();
     }
