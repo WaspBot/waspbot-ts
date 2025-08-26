@@ -363,7 +363,8 @@ export class EventDispatcher extends EventEmitter {
       const lowest = this.eventQueue.peekLowest();
       if (!lowest || lowest.priority > event.priority) {
         // Drop incoming low-priority event
-        return this.hasListeners(event.type);
+        // Reflect all dispatched listeners, including filtered and routed
+        return this.getAllListenersForEvent(event).length > 0;
       }
       // Drop current lowest-priority queued event to make room
       this.eventQueue.popLowest();
@@ -373,14 +374,15 @@ export class EventDispatcher extends EventEmitter {
     if (!this.processing) {
       await this.processQueue();
     }
-    return this.hasListeners(event.type);
+    // Reflect all dispatched listeners, including filtered and routed
+    return this.getAllListenersForEvent(event).length > 0;
   }
 
   /**
    * Emit an event synchronously (immediate processing)
    */
   public emitSync(event: BaseEvent): boolean {
-    const listeners = this.getListeners(event.type);
+    const listeners = this.getAllListenersForEvent(event);
 
     if (listeners.length === 0) {
       return false;
@@ -402,7 +404,7 @@ export class EventDispatcher extends EventEmitter {
       }
     }
 
-    return true;
+    return listeners.length > 0;
   }
 
   /**
