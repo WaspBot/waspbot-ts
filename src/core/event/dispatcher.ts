@@ -530,16 +530,25 @@ export class EventDispatcher extends EventEmitter {
    * Check if a string matches a pattern (supports wildcards)
    */
   private matchesPattern(text: string, pattern: string): boolean {
-    // Convert wildcard pattern to regex
-    // * matches any sequence of characters
-    // ? matches any single character
-    const regexPattern = pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-      .replace(/\\\*/g, '.*') // Convert * to .*
-      .replace(/\\\?/g, '.'); // Convert ? to .
-
-    const regex = new RegExp(`^${regexPattern}$`, 'i');
-    return regex.test(text);
+    // Case-insensitive wildcard match without RegExp to avoid ReDoS.
+    const s = text.toLowerCase();
+    const p = pattern.toLowerCase();
+    let i = 0, j = 0, star = -1, match = 0;
+    while (i < s.length) {
+      if (j < p.length && (p[j] === '?' || p[j] === s[i])) {
+        i++; j++;
+      } else if (j < p.length && p[j] === '*') {
+        star = j++;
+        match = i;
+      } else if (star !== -1) {
+        j = star + 1;
+        i = ++match;
+      } else {
+        return false;
+      }
+    }
+    while (j < p.length && p[j] === '*') j++;
+    return j === p.length;
   }
 
   /**
