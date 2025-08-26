@@ -25,7 +25,7 @@ import {
   TimeInForce,
   TradingPair,
   ExchangeId,
-  WaspBotError
+  WaspBotError,
 } from './common.js';
 
 import {
@@ -34,7 +34,7 @@ import {
   CreateOrderRequest,
   InFlightOrder,
   OrderUpdate,
-  TradeUpdate
+  TradeUpdate,
 } from './orders-basic.js';
 
 import {
@@ -44,7 +44,7 @@ import {
   BalanceUpdate,
   PortfolioPerformance,
   PortfolioRisk,
-  PortfolioSnapshot
+  PortfolioSnapshot,
 } from './orders-portfolio.js';
 
 // ============================================================================
@@ -81,7 +81,10 @@ export interface OrderManager {
   /**
    * Modify an existing order (price and/or quantity).
    */
-  modifyOrder(clientOrderId: string, modification: OrderModification): Promise<OrderModificationResult>;
+  modifyOrder(
+    clientOrderId: string,
+    modification: OrderModification
+  ): Promise<OrderModificationResult>;
 
   // ========== Order Tracking and Queries ==========
 
@@ -611,7 +614,7 @@ export enum OrderSortField {
   AMOUNT = 'AMOUNT',
   PRICE = 'PRICE',
   EXECUTED_AMOUNT = 'EXECUTED_AMOUNT',
-  STATE = 'STATE'
+  STATE = 'STATE',
 }
 
 /**
@@ -661,7 +664,7 @@ export enum TimePeriodType {
   LAST_MONTH = 'LAST_MONTH',
   LAST_QUARTER = 'LAST_QUARTER',
   LAST_YEAR = 'LAST_YEAR',
-  INCEPTION = 'INCEPTION'
+  INCEPTION = 'INCEPTION',
 }
 
 // ============================================================================
@@ -902,7 +905,7 @@ export enum DiscrepancyType {
   PRICE_MISMATCH = 'PRICE_MISMATCH',
   MISSING_FILLS = 'MISSING_FILLS',
   EXTRA_FILLS = 'EXTRA_FILLS',
-  EXECUTION_MISMATCH = 'EXECUTION_MISMATCH'
+  EXECUTION_MISMATCH = 'EXECUTION_MISMATCH',
 }
 
 /**
@@ -914,7 +917,7 @@ export enum ReconciliationAction {
   CREATE_MISSING_ORDER = 'CREATE_MISSING_ORDER',
   MARK_AS_LOST = 'MARK_AS_LOST',
   INVESTIGATE_MANUALLY = 'INVESTIGATE_MANUALLY',
-  NO_ACTION_REQUIRED = 'NO_ACTION_REQUIRED'
+  NO_ACTION_REQUIRED = 'NO_ACTION_REQUIRED',
 }
 
 /**
@@ -999,7 +1002,11 @@ export class OrderTrackerError extends WaspBotError {
 /**
  * Type for utility functions that will be implemented in the core modules.
  */
-export type CreateTimePeriodFunction = (type: TimePeriodType, customStart?: Timestamp, customEnd?: Timestamp) => TimePeriod;
+export type CreateTimePeriodFunction = (
+  type: TimePeriodType,
+  customStart?: Timestamp,
+  customEnd?: Timestamp
+) => TimePeriod;
 
 /**
  * Type for order filter matching function.
@@ -1009,7 +1016,11 @@ export type OrderFilterFunction = (order: InFlightOrder, filter: OrderFilter) =>
 /**
  * Type for order sorting function.
  */
-export type OrderSortFunction = (orders: InFlightOrder[], sortBy: OrderSortField, direction?: 'ASC' | 'DESC') => InFlightOrder[];
+export type OrderSortFunction = (
+  orders: InFlightOrder[],
+  sortBy: OrderSortField,
+  direction?: 'ASC' | 'DESC'
+) => InFlightOrder[];
 
 // ============================================================================
 // Export Types for Convenient Importing

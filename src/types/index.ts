@@ -6,15 +6,15 @@
  */
 
 // Export common types and utilities
-export * from './common';
+export * from './common.js';
 
 // Export market data types (Phase 2 - Issue #4)
-export * from './market';
+export * from './market.js';
 
 // Export order management types (Phase 3 - Issues #5-#9)
-export * from './orders-basic'; // Issue #5: Core order types and lifecycle
-export * from './orders-portfolio'; // Issue #6: Portfolio and position management
-export * from './orders-management'; // Issue #7: Order management services
+export * from './orders-basic.js'; // Issue #5: Core order types and lifecycle
+export * from './orders-portfolio.js'; // Issue #6: Portfolio and position management
+export * from './orders-management.js'; // Issue #7: Order management services
 
 // TODO: Add remaining order management modules
 // export * from './orders-validation';   // Issue #8: Risk management and validation
