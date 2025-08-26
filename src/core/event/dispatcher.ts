@@ -68,25 +68,145 @@ interface QueuedEvent {
   readonly event: BaseEvent;
   readonly priority: EventPriority;
   readonly timestamp: number;
+  readonly retryCount?: number;
 }
 
 /**
- * Priority-based event queue
+ * Queue overflow strategies
+ */
+export enum QueueOverflowStrategy {
+  /** Drop incoming events when queue is full */
+  DROP_INCOMING = 'DROP_INCOMING',
+  /** Drop oldest events when queue is full */
+  DROP_OLDEST = 'DROP_OLDEST',
+  /** Drop lowest priority events when queue is full */
+  DROP_LOWEST_PRIORITY = 'DROP_LOWEST_PRIORITY',
+  /** Block until space is available */
+  BLOCK = 'BLOCK',
+  /** Reject with error */
+  REJECT = 'REJECT',
+}
+
+/**
+ * Queue processing state
+ */
+export enum QueueProcessingState {
+  IDLE = 'IDLE',
+  PROCESSING = 'PROCESSING',
+  PAUSED = 'PAUSED',
+  DRAINING = 'DRAINING',
+  ERROR = 'ERROR',
+}
+
+/**
+ * Queue metrics for monitoring
+ */
+export interface QueueMetrics {
+  /** Current queue size */
+  size: number;
+  /** Maximum size reached */
+  maxSize: number;
+  /** Total events processed */
+  totalProcessed: number;
+  /** Total events dropped */
+  totalDropped: number;
+  /** Total events failed */
+  totalFailed: number;
+  /** Average processing time (ms) */
+  avgProcessingTime: number;
+  /** Current processing rate (events/sec) */
+  processingRate: number;
+  /** Queue processing state */
+  state: QueueProcessingState;
+  /** Backpressure active */
+  backpressureActive: boolean;
+}
+
+/**
+ * Queue configuration
+ */
+export interface QueueConfig {
+  /** Maximum queue size */
+  maxSize?: number;
+  /** Overflow strategy when queue is full */
+  overflowStrategy?: QueueOverflowStrategy;
+  /** Enable backpressure handling */
+  enableBackpressure?: boolean;
+  /** Backpressure threshold (percentage of maxSize) */
+  backpressureThreshold?: number;
+  /** Processing batch size */
+  batchSize?: number;
+  /** Maximum processing time per event (ms) */
+  maxProcessingTime?: number;
+  /** Enable metrics collection */
+  enableMetrics?: boolean;
+}
+
+/**
+ * Default queue configuration
+ */
+const DEFAULT_QUEUE_CONFIG: Required<QueueConfig> = {
+  maxSize: 1000,
+  overflowStrategy: QueueOverflowStrategy.DROP_LOWEST_PRIORITY,
+  enableBackpressure: true,
+  backpressureThreshold: 0.8, // 80%
+  batchSize: 10,
+  maxProcessingTime: 5000,
+  enableMetrics: true,
+};
+
+/**
+ * Advanced priority-based event queue with backpressure and monitoring
  */
 class EventQueue {
   private queue: QueuedEvent[] = [];
+  private readonly config: Required<QueueConfig>;
+  private metrics: QueueMetrics;
+  private processingState: QueueProcessingState = QueueProcessingState.IDLE;
+  private processingTimes: number[] = [];
+  private lastMetricsUpdate: number = Date.now();
+
+  constructor(config: QueueConfig = {}) {
+    this.config = { ...DEFAULT_QUEUE_CONFIG, ...config };
+    this.metrics = {
+      size: 0,
+      maxSize: 0,
+      totalProcessed: 0,
+      totalDropped: 0,
+      totalFailed: 0,
+      avgProcessingTime: 0,
+      processingRate: 0,
+      state: QueueProcessingState.IDLE,
+      backpressureActive: false,
+    };
+  }
 
   /**
-   * Add event to queue with automatic priority sorting
+   * Add event to queue with overflow handling
    */
-  public enqueue(event: BaseEvent): void {
+  public enqueue(event: BaseEvent): boolean {
     const queuedEvent: QueuedEvent = {
       event,
       priority: event.priority,
       timestamp: Date.now(),
+      retryCount: 0,
     };
 
+    // Check if queue is at capacity
+    if (this.queue.length >= this.config.maxSize) {
+      return this.handleOverflow(queuedEvent);
+    }
+
     // Insert in priority order (highest priority first)
+    this.insertByPriority(queuedEvent);
+    this.updateMetrics();
+    return true;
+  }
+
+  /**
+   * Insert event by priority order (highest priority first)
+   */
+  private insertByPriority(queuedEvent: QueuedEvent): void {
     let insertIndex = 0;
     for (let i = 0; i < this.queue.length; i++) {
       const item = this.queue[i];
@@ -101,10 +221,89 @@ class EventQueue {
   }
 
   /**
+   * Handle queue overflow based on strategy
+   */
+  private handleOverflow(newEvent: QueuedEvent): boolean {
+    switch (this.config.overflowStrategy) {
+      case QueueOverflowStrategy.DROP_INCOMING: {
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+
+      case QueueOverflowStrategy.DROP_OLDEST: {
+        this.queue.shift(); // Remove oldest
+        this.insertByPriority(newEvent);
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return true;
+      }
+
+      case QueueOverflowStrategy.DROP_LOWEST_PRIORITY: {
+        const lowest = this.peekLowest();
+        if (lowest && lowest.priority <= newEvent.priority) {
+          this.popLowest();
+          // Insert directly to avoid re-entering overflow handling
+          this.insertByPriority(newEvent);
+          this.metrics.totalDropped++;
+          this.updateMetrics();
+          return true;
+        }
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+
+      case QueueOverflowStrategy.REJECT: {
+        throw new Error(`Queue overflow: maximum size ${this.config.maxSize} exceeded`);
+      }
+
+      case QueueOverflowStrategy.BLOCK: {
+        // In a real implementation, this would block until space is available
+        // For now, we'll just drop the event
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+
+      default: {
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+    }
+  }
+
+  /**
    * Remove and return the highest priority event
    */
   public dequeue(): QueuedEvent | undefined {
-    return this.queue.shift();
+    const event = this.queue.shift();
+    if (event) {
+      this.updateMetrics();
+    }
+    return event;
+  }
+
+  /**
+   * Dequeue multiple events for batch processing
+   */
+  public dequeueBatch(maxSize: number = this.config.batchSize): QueuedEvent[] {
+    const batch: QueuedEvent[] = [];
+    const actualSize = Math.min(maxSize, this.queue.length);
+
+    for (let i = 0; i < actualSize; i++) {
+      const event = this.queue.shift();
+      if (event) {
+        batch.push(event);
+      }
+    }
+
+    if (batch.length > 0) {
+      this.updateMetrics();
+    }
+
+    return batch;
   }
 
   /**
@@ -126,6 +325,7 @@ class EventQueue {
    */
   public clear(): void {
     this.queue = [];
+    this.updateMetrics();
   }
 
   /**
@@ -139,7 +339,109 @@ class EventQueue {
    * Remove and return the lowest-priority item
    */
   public popLowest(): QueuedEvent | undefined {
-    return this.queue.pop();
+    const event = this.queue.pop();
+    if (event) {
+      this.updateMetrics();
+    }
+    return event;
+  }
+
+  /**
+   * Check if backpressure should be applied
+   */
+  public isBackpressureActive(): boolean {
+    if (!this.config.enableBackpressure) {
+      return false;
+    }
+    const threshold = this.config.maxSize * this.config.backpressureThreshold;
+    return this.queue.length >= threshold;
+  }
+
+  /**
+   * Get queue metrics
+   */
+  public getMetrics(): QueueMetrics {
+    return { ...this.metrics };
+  }
+
+  /**
+   * Update processing state
+   */
+  public setProcessingState(state: QueueProcessingState): void {
+    this.processingState = state;
+    this.metrics.state = state;
+  }
+
+  /**
+   * Record successful event processing
+   */
+  public recordProcessingSuccess(processingTime: number): void {
+    this.metrics.totalProcessed++;
+    this.recordProcessingTime(processingTime);
+  }
+
+  /**
+   * Record failed event processing
+   */
+  public recordProcessingFailure(): void {
+    this.metrics.totalFailed++;
+  }
+
+  /**
+   * Record processing time for metrics
+   */
+  private recordProcessingTime(time: number): void {
+    this.processingTimes.push(time);
+
+    // Keep only recent processing times (last 100)
+    if (this.processingTimes.length > 100) {
+      this.processingTimes = this.processingTimes.slice(-100);
+    }
+
+    // Update average processing time
+    this.metrics.avgProcessingTime =
+      this.processingTimes.reduce((sum, t) => sum + t, 0) / this.processingTimes.length;
+  }
+
+  /**
+   * Update queue metrics
+   */
+  private updateMetrics(): void {
+    if (!this.config.enableMetrics) {
+      return;
+    }
+
+    this.metrics.size = this.queue.length;
+    this.metrics.maxSize = Math.max(this.metrics.maxSize, this.queue.length);
+    this.metrics.backpressureActive = this.isBackpressureActive();
+
+    // Calculate processing rate (events per second)
+    const now = Date.now();
+    const timeDiff = (now - this.lastMetricsUpdate) / 1000;
+    if (timeDiff >= 1.0) {
+      const eventsProcessed = this.metrics.totalProcessed;
+      this.metrics.processingRate = eventsProcessed / timeDiff;
+      this.lastMetricsUpdate = now;
+    }
+  }
+
+  /**
+   * Reset metrics
+   */
+  public resetMetrics(): void {
+    this.metrics = {
+      size: this.queue.length,
+      maxSize: 0,
+      totalProcessed: 0,
+      totalDropped: 0,
+      totalFailed: 0,
+      avgProcessingTime: 0,
+      processingRate: 0,
+      state: this.processingState,
+      backpressureActive: this.isBackpressureActive(),
+    };
+    this.processingTimes = [];
+    this.lastMetricsUpdate = Date.now();
   }
 }
 
@@ -157,6 +459,12 @@ export interface EventDispatcherConfig {
   enableAsync?: boolean;
   /** Maximum processing time per event (ms) */
   maxProcessingTime?: number;
+  /** Queue configuration */
+  queueConfig?: QueueConfig;
+  /** Enable batch processing */
+  enableBatchProcessing?: boolean;
+  /** Batch processing size */
+  batchSize?: number;
 }
 
 /**
@@ -166,6 +474,9 @@ const DEFAULT_CONFIG: Required<EventDispatcherConfig> = {
   maxQueueSize: 1000,
   enableAsync: true,
   maxProcessingTime: 5000,
+  queueConfig: DEFAULT_QUEUE_CONFIG,
+  enableBatchProcessing: false,
+  batchSize: 10,
 };
 
 // ============================================================================
@@ -177,7 +488,7 @@ const DEFAULT_CONFIG: Required<EventDispatcherConfig> = {
  */
 export class EventDispatcher extends EventEmitter {
   private readonly listenerRegistry = new Map<string, Set<EventListener>>();
-  private readonly eventQueue = new EventQueue();
+  private readonly eventQueue: EventQueue;
   private readonly config: Required<EventDispatcherConfig>;
   private processing = false;
 
@@ -193,6 +504,15 @@ export class EventDispatcher extends EventEmitter {
   ) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
+
+    // Create enhanced event queue with configuration
+    const queueConfig: QueueConfig = {
+      ...this.config.queueConfig,
+      maxSize: this.config.maxQueueSize,
+      batchSize: this.config.batchSize,
+      maxProcessingTime: this.config.maxProcessingTime,
+    };
+    this.eventQueue = new EventQueue(queueConfig);
   }
 
   // ============================================================================
@@ -365,22 +685,32 @@ export class EventDispatcher extends EventEmitter {
    * Emit an event to all subscribers
    */
   public async emitEvent(event: BaseEvent): Promise<boolean> {
-    // Enforce max queue size with priority-aware drop policy
-    if (this.eventQueue.size() >= this.config.maxQueueSize) {
-      const lowest = this.eventQueue.peekLowest();
-      if (!lowest || lowest.priority > event.priority) {
-        // Drop incoming low-priority event
-        // Reflect all dispatched listeners, including filtered and routed
-        return this.getAllListenersForEvent(event).length > 0;
-      }
-      // Drop current lowest-priority queued event to make room
-      this.eventQueue.popLowest();
+    // Check for backpressure and handle accordingly
+    if (this.eventQueue.isBackpressureActive()) {
+      super.emit('backpressure', {
+        queueSize: this.eventQueue.size(),
+        eventType: event.type,
+        priority: event.priority,
+      });
     }
-    this.eventQueue.enqueue(event);
 
+    // Try to enqueue the event (handles overflow automatically)
+    const enqueued = this.eventQueue.enqueue(event);
+
+    if (!enqueued) {
+      // Event was dropped due to overflow
+      super.emit('eventDropped', {
+        eventType: event.type,
+        priority: event.priority,
+        queueSize: this.eventQueue.size(),
+      });
+    }
+
+    // Start processing if not already processing
     if (!this.processing) {
       await this.processQueue();
     }
+
     // Reflect all dispatched listeners, including filtered and routed
     return this.getAllListenersForEvent(event).length > 0;
   }
@@ -418,21 +748,28 @@ export class EventDispatcher extends EventEmitter {
    * Emit multiple events in batch
    */
   public async emitBatch(events: BaseEvent[]): Promise<void> {
+    let enqueuedCount = 0;
+    let droppedCount = 0;
+
     for (const event of events) {
-      if (this.eventQueue.size() >= this.config.maxQueueSize) {
-        const lowest = this.eventQueue.peekLowest();
-        if (lowest && lowest.priority <= event.priority) {
-          this.eventQueue.popLowest();
-          this.eventQueue.enqueue(event);
-        } else {
-          // drop incoming if it's not higher priority
-          continue;
-        }
+      const enqueued = this.eventQueue.enqueue(event);
+      if (enqueued) {
+        enqueuedCount++;
       } else {
-        this.eventQueue.enqueue(event);
+        droppedCount++;
       }
     }
-    if (!this.processing) {
+
+    if (droppedCount > 0) {
+      super.emit('batchDropped', {
+        totalEvents: events.length,
+        enqueuedCount,
+        droppedCount,
+        queueSize: this.eventQueue.size(),
+      });
+    }
+
+    if (!this.processing && enqueuedCount > 0) {
       await this.processQueue();
     }
   }
@@ -450,17 +787,70 @@ export class EventDispatcher extends EventEmitter {
     }
 
     this.processing = true;
+    this.eventQueue.setProcessingState(QueueProcessingState.PROCESSING);
 
     try {
-      while (!this.eventQueue.isEmpty()) {
-        const queuedEvent = this.eventQueue.dequeue();
-        if (queuedEvent) {
-          await this.processEvent(queuedEvent.event);
-        }
+      if (this.config.enableBatchProcessing) {
+        await this.processBatchQueue();
+      } else {
+        await this.processSequentialQueue();
       }
+    } catch (error) {
+      this.eventQueue.setProcessingState(QueueProcessingState.ERROR);
+      console.error('Error in queue processing:', error);
     } finally {
       this.processing = false;
+      this.eventQueue.setProcessingState(QueueProcessingState.IDLE);
     }
+  }
+
+  /**
+   * Process queue sequentially (one event at a time)
+   */
+  private async processSequentialQueue(): Promise<void> {
+    while (!this.eventQueue.isEmpty()) {
+      const queuedEvent = this.eventQueue.dequeue();
+      if (queuedEvent) {
+        await this.processEvent(queuedEvent.event);
+      }
+    }
+  }
+
+  /**
+   * Process queue in batches for better performance
+   */
+  private async processBatchQueue(): Promise<void> {
+    while (!this.eventQueue.isEmpty()) {
+      const batch = this.eventQueue.dequeueBatch(this.config.batchSize);
+      if (batch.length > 0) {
+        await this.processBatch(batch);
+      }
+    }
+  }
+
+  /**
+   * Process a batch of events
+   */
+  private async processBatch(batch: QueuedEvent[]): Promise<void> {
+    const batchStartTime = Date.now();
+
+    if (this.config.enableAsync) {
+      // Process all events in the batch in parallel
+      const promises = batch.map(queuedEvent => this.processEvent(queuedEvent.event));
+      await Promise.allSettled(promises);
+    } else {
+      // Process events sequentially
+      for (const queuedEvent of batch) {
+        await this.processEvent(queuedEvent.event);
+      }
+    }
+
+    const batchProcessingTime = Date.now() - batchStartTime;
+    super.emit('batchProcessed', {
+      batchSize: batch.length,
+      processingTime: batchProcessingTime,
+      queueSize: this.eventQueue.size(),
+    });
   }
 
   /**
@@ -474,22 +864,57 @@ export class EventDispatcher extends EventEmitter {
     }
 
     const startTime = Date.now();
+    let processingSuccessful = true;
 
-    // Process listeners in parallel if async is enabled
-    if (this.config.enableAsync) {
-      const promises = listeners.map(listener => this.callListener(listener, event));
-      await Promise.allSettled(promises);
-    } else {
-      // Process listeners sequentially
-      for (const listener of listeners) {
-        await this.callListener(listener, event);
+    try {
+      // Process listeners in parallel if async is enabled
+      if (this.config.enableAsync) {
+        const promises = listeners.map(listener => this.callListener(listener, event));
+        const results = await Promise.allSettled(promises);
+
+        // Check if any listener failed
+        processingSuccessful = results.every(result => result.status === 'fulfilled');
+      } else {
+        // Process listeners sequentially
+        for (const listener of listeners) {
+          try {
+            await this.callListener(listener, event);
+          } catch (error) {
+            processingSuccessful = false;
+            console.error(
+              `Error processing event ${event.type} with listener ${listener.getName()}:`,
+              error
+            );
+          }
+        }
       }
-    }
 
-    // Check for slow processing
-    const processingTime = Date.now() - startTime;
-    if (processingTime > this.config.maxProcessingTime) {
-      console.warn(`Slow event processing: ${event.type} took ${processingTime}ms`);
+      const processingTime = Date.now() - startTime;
+
+      // Record metrics
+      if (processingSuccessful) {
+        this.eventQueue.recordProcessingSuccess(processingTime);
+      } else {
+        this.eventQueue.recordProcessingFailure();
+      }
+
+      // Check for slow processing
+      if (processingTime > this.config.maxProcessingTime) {
+        console.warn(`Slow event processing: ${event.type} took ${processingTime}ms`);
+        super.emit('slowProcessing', {
+          eventType: event.type,
+          processingTime,
+          threshold: this.config.maxProcessingTime,
+        });
+      }
+    } catch (error) {
+      processingSuccessful = false;
+      this.eventQueue.recordProcessingFailure();
+      console.error(`Critical error processing event ${event.type}:`, error);
+      super.emit('processingError', {
+        eventType: event.type,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -680,6 +1105,52 @@ export class EventDispatcher extends EventEmitter {
   }
 
   /**
+   * Check if backpressure is active
+   */
+  public isBackpressureActive(): boolean {
+    return this.eventQueue.isBackpressureActive();
+  }
+
+  /**
+   * Get queue metrics
+   */
+  public getQueueMetrics(): QueueMetrics {
+    return this.eventQueue.getMetrics();
+  }
+
+  /**
+   * Reset queue metrics
+   */
+  public resetQueueMetrics(): void {
+    this.eventQueue.resetMetrics();
+  }
+
+  /**
+   * Pause queue processing
+   */
+  public pauseProcessing(): void {
+    this.eventQueue.setProcessingState(QueueProcessingState.PAUSED);
+  }
+
+  /**
+   * Resume queue processing
+   */
+  public async resumeProcessing(): Promise<void> {
+    this.eventQueue.setProcessingState(QueueProcessingState.IDLE);
+    if (!this.processing && !this.eventQueue.isEmpty()) {
+      await this.processQueue();
+    }
+  }
+
+  /**
+   * Drain the queue (process all pending events)
+   */
+  public async drainQueue(): Promise<void> {
+    this.eventQueue.setProcessingState(QueueProcessingState.DRAINING);
+    await this.processQueue();
+  }
+
+  /**
    * Clear all pending events from queue
    */
   public clearQueue(): void {
@@ -703,6 +1174,8 @@ export class EventDispatcher extends EventEmitter {
     isProcessing: boolean;
     filteredSubscriptionCount: number;
     routeCount: number;
+    queueMetrics: QueueMetrics;
+    backpressureActive: boolean;
   } {
     return {
       name: this.name,
@@ -711,6 +1184,8 @@ export class EventDispatcher extends EventEmitter {
       isProcessing: this.isProcessing(),
       filteredSubscriptionCount: this.filteredSubscriptions.size,
       routeCount: this.eventRoutes.size,
+      queueMetrics: this.getQueueMetrics(),
+      backpressureActive: this.isBackpressureActive(),
     };
   }
 
