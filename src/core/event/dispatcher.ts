@@ -310,25 +310,32 @@ export class EventDispatcher extends EventEmitter {
    */
   public getAllListenersForEvent(event: BaseEvent): EventListener[] {
     const directListeners = this.getListeners(event.type);
-    const filteredListeners: EventListener[] = [];
 
-    // Check filtered subscriptions
+    // Collect route listeners ordered by route priority (desc)
+    const routeListenersPrioritized: EventListener[] = Array.from(this.eventRoutes.values())
+      .filter(route => route.active && this.matchesFilter(event, route.filter))
+      .sort((a, b) => b.priority - a.priority)
+      .flatMap(route => Array.from(route.listeners));
+
+    // Collect filtered subscription listeners
+    const filteredListeners: EventListener[] = [];
     for (const subscription of this.filteredSubscriptions.values()) {
       if (subscription.active && this.matchesFilter(event, subscription.filter)) {
         filteredListeners.push(subscription.listener);
       }
     }
 
-    // Check event routes
-    for (const route of this.eventRoutes.values()) {
-      if (route.active && this.matchesFilter(event, route.filter)) {
-        filteredListeners.push(...Array.from(route.listeners));
+    // Combine in order and dedupe preserving first occurrence
+    const combined = [...directListeners, ...routeListenersPrioritized, ...filteredListeners];
+    const seen = new Set<EventListener>();
+    const deduped: EventListener[] = [];
+    for (const l of combined) {
+      if (!seen.has(l)) {
+        seen.add(l);
+        deduped.push(l);
       }
     }
-
-    // Combine and deduplicate
-    const allListeners = [...directListeners, ...filteredListeners];
-    return Array.from(new Set(allListeners));
+    return deduped;
   }
 
   /**
@@ -533,10 +540,14 @@ export class EventDispatcher extends EventEmitter {
     // Case-insensitive wildcard match without RegExp to avoid ReDoS.
     const s = text.toLowerCase();
     const p = pattern.toLowerCase();
-    let i = 0, j = 0, star = -1, match = 0;
+    let i = 0,
+      j = 0,
+      star = -1,
+      match = 0;
     while (i < s.length) {
       if (j < p.length && (p[j] === '?' || p[j] === s[i])) {
-        i++; j++;
+        i++;
+        j++;
       } else if (j < p.length && p[j] === '*') {
         star = j++;
         match = i;
