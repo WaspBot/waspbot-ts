@@ -152,15 +152,80 @@ class EventQueue {
       return this.handleOverflow(queuedEvent);
     }
 
-    // Add to batch buffer first
-    this.batchBuffer.push(queuedEvent);
+    // Insert in priority order (highest priority first)
+    this.insertByPriority(queuedEvent);
+    this.updateMetrics();
+    return true;
+  }
 
-    // Check if we should process the batch
-    if (this.shouldProcessBatch()) {
-      this.processBatchBuffer();
-    } else if (!this.batchTimer) {
-      // Start batch timer if not already running
-      this.startBatchTimer();
+  /**
+   * Insert event by priority order (highest priority first)
+   */
+  private insertByPriority(queuedEvent: QueuedEvent): void {
+    let insertIndex = 0;
+    for (let i = 0; i < this.queue.length; i++) {
+      const item = this.queue[i];
+      if (item && item.priority < queuedEvent.priority) {
+        insertIndex = i;
+        break;
+      }
+      insertIndex = i + 1;
+    }
+
+    this.queue.splice(insertIndex, 0, queuedEvent);
+  }
+
+  /**
+   * Handle queue overflow based on strategy
+   */
+  private handleOverflow(newEvent: QueuedEvent): boolean {
+    switch (this.config.overflowStrategy) {
+      case QueueOverflowStrategy.DROP_INCOMING: {
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+
+      case QueueOverflowStrategy.DROP_OLDEST: {
+        this.queue.shift(); // Remove oldest
+        this.insertByPriority(newEvent);
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return true;
+      }
+
+      case QueueOverflowStrategy.DROP_LOWEST_PRIORITY: {
+        const lowest = this.peekLowest();
+        if (lowest && lowest.priority <= newEvent.priority) {
+          this.popLowest();
+          // Insert directly to avoid re-entering overflow handling
+          this.insertByPriority(newEvent);
+          this.metrics.totalDropped++;
+          this.updateMetrics();
+          return true;
+        }
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+
+      case QueueOverflowStrategy.REJECT: {
+        throw new Error(`Queue overflow: maximum size ${this.config.maxSize} exceeded`);
+      }
+
+      case QueueOverflowStrategy.BLOCK: {
+        // In a real implementation, this would block until space is available
+        // For now, we'll just drop the event
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+
+      default: {
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
     }
   }
 
