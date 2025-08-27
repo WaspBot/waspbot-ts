@@ -58,6 +58,60 @@ export interface FilteredSubscription {
 }
 
 // ============================================================================
+// Event Batching Support
+// ============================================================================
+
+/**
+ * Batch processing strategies
+ */
+export enum BatchProcessingStrategy {
+  /** Process all events in batch sequentially */
+  SEQUENTIAL = 'sequential',
+  /** Process events in batch in parallel */
+  PARALLEL = 'parallel',
+  /** Process events in smaller sub-batches */
+  CHUNKED = 'chunked',
+  /** Process events by priority groups */
+  PRIORITY_GROUPED = 'priority-grouped',
+}
+
+/**
+ * Batch configuration
+ */
+export interface BatchConfig {
+  /** Maximum number of events per batch */
+  maxBatchSize: number;
+  /** Maximum time to wait before processing batch (ms) */
+  maxBatchDelay: number;
+  /** Batch processing strategy */
+  strategy: BatchProcessingStrategy;
+  /** Chunk size for chunked strategy */
+  chunkSize?: number;
+  /** Enable batch compression for similar events */
+  enableCompression?: boolean;
+}
+
+/**
+ * Event batch container
+ */
+export interface EventBatch {
+  /** Unique batch identifier */
+  id: string;
+  /** Events in this batch */
+  events: BaseEvent[];
+  /** Batch creation timestamp */
+  createdAt: number;
+  /** Batch processing strategy */
+  strategy: BatchProcessingStrategy;
+  /** Batch metadata */
+  metadata: {
+    totalEvents: number;
+    priorityDistribution: Map<EventPriority, number>;
+    sourceDistribution: Map<string, number>;
+  };
+}
+
+// ============================================================================
 // Event Queue with Priority Support
 // ============================================================================
 
@@ -71,10 +125,15 @@ interface QueuedEvent {
 }
 
 /**
- * Priority-based event queue
+ * Enhanced priority-based event queue with batching support
  */
 class EventQueue {
   private queue: QueuedEvent[] = [];
+  private batchBuffer: QueuedEvent[] = [];
+  private batchTimer: NodeJS.Timeout | null = null;
+  private batchCounter = 0;
+
+  constructor(private readonly batchConfig: BatchConfig) {}
 
   /**
    * Add event to queue with automatic priority sorting
@@ -86,7 +145,169 @@ class EventQueue {
       timestamp: Date.now(),
     };
 
-    // Insert in priority order (highest priority first)
+    // Add to batch buffer first
+    this.batchBuffer.push(queuedEvent);
+
+    // Check if we should process the batch
+    if (this.shouldProcessBatch()) {
+      this.processBatchBuffer();
+    } else if (!this.batchTimer) {
+      // Start batch timer if not already running
+      this.startBatchTimer();
+    }
+  }
+
+  /**
+   * Remove and return the highest priority event
+   */
+  public dequeue(): QueuedEvent | undefined {
+    return this.queue.shift();
+  }
+
+  /**
+   * Check if queue is empty
+   */
+  public isEmpty(): boolean {
+    return this.queue.length === 0 && this.batchBuffer.length === 0;
+  }
+
+  /**
+   * Get current queue size
+   */
+  public size(): number {
+    return this.queue.length + this.batchBuffer.length;
+  }
+
+  /**
+   * Clear all events from queue
+   */
+  public clear(): void {
+    this.queue = [];
+    this.batchBuffer = [];
+    if (this.batchTimer) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+  }
+
+  /**
+   * Peek lowest-priority (FIFO within same priority)
+   */
+  public peekLowest(): QueuedEvent | undefined {
+    // Check both queue and buffer for lowest priority
+    const queueLowest = this.queue[this.queue.length - 1];
+    const bufferLowest =
+      this.batchBuffer.length > 0
+        ? this.batchBuffer.reduce((lowest, current) =>
+            current.priority < lowest.priority ? current : lowest
+          )
+        : undefined;
+
+    if (!queueLowest && !bufferLowest) return undefined;
+    if (!queueLowest) return bufferLowest;
+    if (!bufferLowest) return queueLowest;
+
+    return queueLowest.priority <= bufferLowest.priority ? queueLowest : bufferLowest;
+  }
+
+  /**
+   * Remove and return the lowest-priority item
+   */
+  public popLowest(): QueuedEvent | undefined {
+    const queueLowest = this.queue[this.queue.length - 1];
+    const bufferLowestIndex =
+      this.batchBuffer.length > 0
+        ? this.batchBuffer.reduce((lowestIdx, current, idx) => {
+            const lowestItem = this.batchBuffer[lowestIdx];
+            return lowestItem && current.priority < lowestItem.priority ? idx : lowestIdx;
+          }, 0)
+        : -1;
+    const bufferLowest = bufferLowestIndex >= 0 ? this.batchBuffer[bufferLowestIndex] : undefined;
+
+    if (!queueLowest && !bufferLowest) return undefined;
+
+    if (!queueLowest || (bufferLowest && bufferLowest.priority < queueLowest.priority)) {
+      // Remove from buffer
+      return this.batchBuffer.splice(bufferLowestIndex, 1)[0];
+    } else {
+      // Remove from queue
+      return this.queue.pop();
+    }
+  }
+
+  /**
+   * Get the next batch of events ready for processing
+   */
+  public dequeueBatch(): EventBatch | undefined {
+    if (this.queue.length === 0) {
+      return undefined;
+    }
+
+    const batchSize = Math.min(this.batchConfig.maxBatchSize, this.queue.length);
+    const events = this.queue.splice(0, batchSize).map(qe => qe.event);
+
+    return this.createEventBatch(events);
+  }
+
+  /**
+   * Force process current batch buffer
+   */
+  public flushBatchBuffer(): void {
+    if (this.batchBuffer.length > 0) {
+      this.processBatchBuffer();
+    }
+  }
+
+  /**
+   * Check if batch should be processed
+   */
+  private shouldProcessBatch(): boolean {
+    return this.batchBuffer.length >= this.batchConfig.maxBatchSize;
+  }
+
+  /**
+   * Start batch timer for delayed processing
+   */
+  private startBatchTimer(): void {
+    this.batchTimer = setTimeout(() => {
+      this.processBatchBuffer();
+      this.batchTimer = null;
+    }, this.batchConfig.maxBatchDelay);
+  }
+
+  /**
+   * Process events from batch buffer into main queue
+   */
+  private processBatchBuffer(): void {
+    if (this.batchBuffer.length === 0) return;
+
+    // Sort batch buffer by priority
+    this.batchBuffer.sort((a, b) => b.priority - a.priority);
+
+    // Compress similar events if enabled
+    const eventsToProcess = this.batchConfig.enableCompression
+      ? this.compressEvents(this.batchBuffer)
+      : this.batchBuffer;
+
+    // Add to main queue maintaining priority order
+    for (const queuedEvent of eventsToProcess) {
+      this.insertIntoMainQueue(queuedEvent);
+    }
+
+    // Clear batch buffer
+    this.batchBuffer = [];
+
+    // Clear timer
+    if (this.batchTimer) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+  }
+
+  /**
+   * Insert event into main queue maintaining priority order
+   */
+  private insertIntoMainQueue(queuedEvent: QueuedEvent): void {
     let insertIndex = 0;
     for (let i = 0; i < this.queue.length; i++) {
       const item = this.queue[i];
@@ -101,45 +322,52 @@ class EventQueue {
   }
 
   /**
-   * Remove and return the highest priority event
+   * Compress similar events in batch (basic deduplication)
    */
-  public dequeue(): QueuedEvent | undefined {
-    return this.queue.shift();
+  private compressEvents(queuedEvents: QueuedEvent[]): QueuedEvent[] {
+    const eventMap = new Map<string, QueuedEvent>();
+
+    for (const queuedEvent of queuedEvents) {
+      const key = `${queuedEvent.event.type}_${queuedEvent.event.source || 'unknown'}`;
+      const existing = eventMap.get(key);
+
+      if (!existing || queuedEvent.priority > existing.priority) {
+        eventMap.set(key, queuedEvent);
+      }
+    }
+
+    return Array.from(eventMap.values());
   }
 
   /**
-   * Check if queue is empty
+   * Create event batch with metadata
    */
-  public isEmpty(): boolean {
-    return this.queue.length === 0;
-  }
+  private createEventBatch(events: BaseEvent[]): EventBatch {
+    const priorityDistribution = new Map<EventPriority, number>();
+    const sourceDistribution = new Map<string, number>();
 
-  /**
-   * Get current queue size
-   */
-  public size(): number {
-    return this.queue.length;
-  }
+    for (const event of events) {
+      // Count priorities
+      const currentPriorityCount = priorityDistribution.get(event.priority) || 0;
+      priorityDistribution.set(event.priority, currentPriorityCount + 1);
 
-  /**
-   * Clear all events from queue
-   */
-  public clear(): void {
-    this.queue = [];
-  }
+      // Count sources
+      const source = event.source || 'unknown';
+      const currentSourceCount = sourceDistribution.get(source) || 0;
+      sourceDistribution.set(source, currentSourceCount + 1);
+    }
 
-  /**
-   * Peek lowest-priority (FIFO within same priority)
-   */
-  public peekLowest(): QueuedEvent | undefined {
-    return this.queue[this.queue.length - 1];
-  }
-
-  /**
-   * Remove and return the lowest-priority item
-   */
-  public popLowest(): QueuedEvent | undefined {
-    return this.queue.pop();
+    return {
+      id: `batch_${++this.batchCounter}`,
+      events,
+      createdAt: Date.now(),
+      strategy: this.batchConfig.strategy,
+      metadata: {
+        totalEvents: events.length,
+        priorityDistribution,
+        sourceDistribution,
+      },
+    };
   }
 }
 
@@ -157,7 +385,20 @@ export interface EventDispatcherConfig {
   enableAsync?: boolean;
   /** Maximum processing time per event (ms) */
   maxProcessingTime?: number;
+  /** Batch processing configuration */
+  batch?: BatchConfig;
 }
+
+/**
+ * Default batch configuration
+ */
+const DEFAULT_BATCH_CONFIG: BatchConfig = {
+  maxBatchSize: 50,
+  maxBatchDelay: 100,
+  strategy: BatchProcessingStrategy.PARALLEL,
+  chunkSize: 10,
+  enableCompression: true,
+};
 
 /**
  * Default configuration
@@ -166,6 +407,7 @@ const DEFAULT_CONFIG: Required<EventDispatcherConfig> = {
   maxQueueSize: 1000,
   enableAsync: true,
   maxProcessingTime: 5000,
+  batch: DEFAULT_BATCH_CONFIG,
 };
 
 // ============================================================================
@@ -177,8 +419,8 @@ const DEFAULT_CONFIG: Required<EventDispatcherConfig> = {
  */
 export class EventDispatcher extends EventEmitter {
   private readonly listenerRegistry = new Map<string, Set<EventListener>>();
-  private readonly eventQueue = new EventQueue();
   private readonly config: Required<EventDispatcherConfig>;
+  private readonly eventQueue: EventQueue;
   private processing = false;
 
   // Event filtering and routing
@@ -193,6 +435,7 @@ export class EventDispatcher extends EventEmitter {
   ) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.eventQueue = new EventQueue(this.config.batch);
   }
 
   // ============================================================================
@@ -437,12 +680,108 @@ export class EventDispatcher extends EventEmitter {
     }
   }
 
+  /**
+   * Process events using batch delivery
+   */
+  public async processBatch(batch: EventBatch): Promise<void> {
+    const { events, strategy } = batch;
+
+    switch (strategy) {
+      case BatchProcessingStrategy.SEQUENTIAL:
+        await this.processBatchSequentially(events);
+        break;
+      case BatchProcessingStrategy.PARALLEL:
+        await this.processBatchInParallel(events);
+        break;
+      case BatchProcessingStrategy.CHUNKED:
+        await this.processBatchInChunks(events, this.config.batch.chunkSize || 10);
+        break;
+      case BatchProcessingStrategy.PRIORITY_GROUPED:
+        await this.processBatchByPriorityGroups(events);
+        break;
+      default:
+        await this.processBatchInParallel(events);
+    }
+  }
+
+  /**
+   * Process batch events sequentially
+   */
+  private async processBatchSequentially(events: BaseEvent[]): Promise<void> {
+    for (const event of events) {
+      await this.processEvent(event);
+    }
+  }
+
+  /**
+   * Process batch events in parallel
+   */
+  private async processBatchInParallel(events: BaseEvent[]): Promise<void> {
+    const promises = events.map(event => this.processEvent(event));
+    await Promise.allSettled(promises);
+  }
+
+  /**
+   * Process batch events in chunks
+   */
+  private async processBatchInChunks(events: BaseEvent[], chunkSize: number): Promise<void> {
+    for (let i = 0; i < events.length; i += chunkSize) {
+      const chunk = events.slice(i, i + chunkSize);
+      const promises = chunk.map(event => this.processEvent(event));
+      await Promise.allSettled(promises);
+    }
+  }
+
+  /**
+   * Process batch events grouped by priority
+   */
+  private async processBatchByPriorityGroups(events: BaseEvent[]): Promise<void> {
+    // Group events by priority
+    const priorityGroups = new Map<EventPriority, BaseEvent[]>();
+
+    for (const event of events) {
+      if (!priorityGroups.has(event.priority)) {
+        priorityGroups.set(event.priority, []);
+      }
+      priorityGroups.get(event.priority)!.push(event);
+    }
+
+    // Process groups in priority order (highest first)
+    const sortedPriorities = Array.from(priorityGroups.keys()).sort((a, b) => b - a);
+
+    for (const priority of sortedPriorities) {
+      const groupEvents = priorityGroups.get(priority)!;
+      await this.processBatchInParallel(groupEvents);
+    }
+  }
+
+  /**
+   * Force flush current batch buffer
+   */
+  public flushBatch(): void {
+    this.eventQueue.flushBatchBuffer();
+  }
+
+  /**
+   * Get current batch configuration
+   */
+  public getBatchConfig(): BatchConfig {
+    return this.config.batch;
+  }
+
+  /**
+   * Update batch configuration
+   */
+  public updateBatchConfig(newConfig: Partial<BatchConfig>): void {
+    Object.assign(this.config.batch, newConfig);
+  }
+
   // ============================================================================
   // Queue Processing
   // ============================================================================
 
   /**
-   * Process events from the priority queue
+   * Process events from the priority queue with batch support
    */
   private async processQueue(): Promise<void> {
     if (this.processing) {
@@ -452,14 +791,32 @@ export class EventDispatcher extends EventEmitter {
     this.processing = true;
 
     try {
-      while (!this.eventQueue.isEmpty()) {
-        const queuedEvent = this.eventQueue.dequeue();
-        if (queuedEvent) {
-          await this.processEvent(queuedEvent.event);
+      // Check if we should process in batches
+      if (this.config.batch.maxBatchSize > 1 && this.eventQueue.size() > 1) {
+        await this.processInBatches();
+      } else {
+        // Process individual events
+        while (!this.eventQueue.isEmpty()) {
+          const queuedEvent = this.eventQueue.dequeue();
+          if (queuedEvent) {
+            await this.processEvent(queuedEvent.event);
+          }
         }
       }
     } finally {
       this.processing = false;
+    }
+  }
+
+  /**
+   * Process events in batches
+   */
+  private async processInBatches(): Promise<void> {
+    while (!this.eventQueue.isEmpty()) {
+      const batch = this.eventQueue.dequeueBatch();
+      if (batch) {
+        await this.processBatch(batch);
+      }
     }
   }
 
