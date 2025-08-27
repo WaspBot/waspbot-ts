@@ -8,9 +8,58 @@ import { EventListener } from './listener.js';
 import { BaseEvent, EventPriority } from './events.js';
 
 // ============================================================================
-// Event Queue with Priority Support
+// Event Filtering and Routing Types
 // ============================================================================
 
+/**
+ * Event filter criteria
+ */
+export interface EventFilter {
+  /** Filter by event types (supports wildcards) */
+  types?: string[];
+  /** Filter by event sources */
+  sources?: string[];
+  /** Filter by minimum priority */
+  minPriority?: EventPriority;
+  /** Filter by maximum priority */
+  maxPriority?: EventPriority;
+  /** Custom filter function */
+  customFilter?: (event: BaseEvent) => boolean;
+}
+
+/**
+ * Event routing configuration
+ */
+export interface EventRoute {
+  /** Route identifier */
+  id: string;
+  /** Event filter criteria */
+  filter: EventFilter;
+  /** Target listeners */
+  listeners: Set<EventListener>;
+  /** Route priority (higher = processed first) */
+  priority: number;
+  /** Whether this route is active */
+  active: boolean;
+}
+
+/**
+ * Subscription with filtering support
+ */
+export interface FilteredSubscription {
+  /** Subscription identifier */
+  id: string;
+  /** Event listener */
+  listener: EventListener;
+  /** Event filter criteria */
+  filter: EventFilter;
+  /** Whether subscription is active */
+  active: boolean;
+}
+
+// ============================================================================
+// Event Queue with Priority Support
+// ============================================================================
 
 /**
  * Event queue item with priority support
@@ -132,6 +181,12 @@ export class EventDispatcher extends EventEmitter {
   private readonly config: Required<EventDispatcherConfig>;
   private processing = false;
 
+  // Event filtering and routing
+  private readonly filteredSubscriptions = new Map<string, FilteredSubscription>();
+  private readonly eventRoutes = new Map<string, EventRoute>();
+  private subscriptionCounter = 0;
+  private routeCounter = 0;
+
   constructor(
     public readonly name: string = 'EventDispatcher',
     config: EventDispatcherConfig = {}
@@ -157,6 +212,36 @@ export class EventDispatcher extends EventEmitter {
   }
 
   /**
+   * Subscribe a listener with event filtering
+   */
+  public subscribeWithFilter(filter: EventFilter, listener: EventListener): string {
+    const subscriptionId = `filtered_${++this.subscriptionCounter}`;
+
+    const subscription: FilteredSubscription = {
+      id: subscriptionId,
+      listener,
+      filter,
+      active: true,
+    };
+
+    this.filteredSubscriptions.set(subscriptionId, subscription);
+    super.emit('filteredListenerAdded', subscriptionId, listener, filter);
+
+    return subscriptionId;
+  }
+
+  /**
+   * Subscribe to multiple event types with wildcard support
+   */
+  public subscribeToPattern(pattern: string, listener: EventListener): string {
+    const filter: EventFilter = {
+      types: [pattern],
+    };
+
+    return this.subscribeWithFilter(filter, listener);
+  }
+
+  /**
    * Subscribe to multiple event types at once
    */
   public subscribeToMultiple(eventTypes: string[], listener: EventListener): void {
@@ -177,6 +262,19 @@ export class EventDispatcher extends EventEmitter {
       }
       super.emit('listenerRemoved', eventType, listener);
     }
+  }
+
+  /**
+   * Unsubscribe from a filtered subscription
+   */
+  public unsubscribeFiltered(subscriptionId: string): boolean {
+    const subscription = this.filteredSubscriptions.get(subscriptionId);
+    if (subscription) {
+      this.filteredSubscriptions.delete(subscriptionId);
+      super.emit('filteredListenerRemoved', subscriptionId, subscription.listener);
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -205,6 +303,39 @@ export class EventDispatcher extends EventEmitter {
   public getListeners(eventType: string): EventListener[] {
     const listeners = this.listenerRegistry.get(eventType);
     return listeners ? Array.from(listeners) : [];
+  }
+
+  /**
+   * Get all listeners for an event (including filtered subscriptions)
+   */
+  public getAllListenersForEvent(event: BaseEvent): EventListener[] {
+    const directListeners = this.getListeners(event.type);
+
+    // Collect route listeners ordered by route priority (desc)
+    const routeListenersPrioritized: EventListener[] = Array.from(this.eventRoutes.values())
+      .filter(route => route.active && this.matchesFilter(event, route.filter))
+      .sort((a, b) => b.priority - a.priority)
+      .flatMap(route => Array.from(route.listeners));
+
+    // Collect filtered subscription listeners
+    const filteredListeners: EventListener[] = [];
+    for (const subscription of this.filteredSubscriptions.values()) {
+      if (subscription.active && this.matchesFilter(event, subscription.filter)) {
+        filteredListeners.push(subscription.listener);
+      }
+    }
+
+    // Combine in order and dedupe preserving first occurrence
+    const combined = [...directListeners, ...routeListenersPrioritized, ...filteredListeners];
+    const seen = new Set<EventListener>();
+    const deduped: EventListener[] = [];
+    for (const l of combined) {
+      if (!seen.has(l)) {
+        seen.add(l);
+        deduped.push(l);
+      }
+    }
+    return deduped;
   }
 
   /**
@@ -239,7 +370,8 @@ export class EventDispatcher extends EventEmitter {
       const lowest = this.eventQueue.peekLowest();
       if (!lowest || lowest.priority > event.priority) {
         // Drop incoming low-priority event
-        return this.hasListeners(event.type);
+        // Reflect all dispatched listeners, including filtered and routed
+        return this.getAllListenersForEvent(event).length > 0;
       }
       // Drop current lowest-priority queued event to make room
       this.eventQueue.popLowest();
@@ -249,14 +381,15 @@ export class EventDispatcher extends EventEmitter {
     if (!this.processing) {
       await this.processQueue();
     }
-    return this.hasListeners(event.type);
+    // Reflect all dispatched listeners, including filtered and routed
+    return this.getAllListenersForEvent(event).length > 0;
   }
 
   /**
    * Emit an event synchronously (immediate processing)
    */
   public emitSync(event: BaseEvent): boolean {
-    const listeners = this.getListeners(event.type);
+    const listeners = this.getAllListenersForEvent(event);
 
     if (listeners.length === 0) {
       return false;
@@ -278,7 +411,7 @@ export class EventDispatcher extends EventEmitter {
       }
     }
 
-    return true;
+    return listeners.length > 0;
   }
 
   /**
@@ -334,7 +467,7 @@ export class EventDispatcher extends EventEmitter {
    * Process a single event
    */
   private async processEvent(event: BaseEvent): Promise<void> {
-    const listeners = this.getListeners(event.type);
+    const listeners = this.getAllListenersForEvent(event);
 
     if (listeners.length === 0) {
       return;
@@ -358,6 +491,154 @@ export class EventDispatcher extends EventEmitter {
     if (processingTime > this.config.maxProcessingTime) {
       console.warn(`Slow event processing: ${event.type} took ${processingTime}ms`);
     }
+  }
+
+  // ============================================================================
+  // Event Filtering and Routing
+  // ============================================================================
+
+  /**
+   * Check if an event matches a filter
+   */
+  private matchesFilter(event: BaseEvent, filter: EventFilter): boolean {
+    // Check event types with wildcard support
+    if (filter.types && filter.types.length > 0) {
+      const matchesType = filter.types.some(pattern => this.matchesPattern(event.type, pattern));
+      if (!matchesType) {
+        return false;
+      }
+    }
+
+    // Check event sources
+    if (filter.sources && filter.sources.length > 0) {
+      if (!event.source || !filter.sources.includes(event.source)) {
+        return false;
+      }
+    }
+
+    // Check priority range
+    if (filter.minPriority !== undefined && event.priority < filter.minPriority) {
+      return false;
+    }
+
+    if (filter.maxPriority !== undefined && event.priority > filter.maxPriority) {
+      return false;
+    }
+
+    // Check custom filter
+    if (filter.customFilter && !filter.customFilter(event)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Check if a string matches a pattern (supports wildcards)
+   */
+  private matchesPattern(text: string, pattern: string): boolean {
+    // Case-insensitive wildcard match without RegExp to avoid ReDoS.
+    const s = text.toLowerCase();
+    const p = pattern.toLowerCase();
+    let i = 0,
+      j = 0,
+      star = -1,
+      match = 0;
+    while (i < s.length) {
+      if (j < p.length && (p[j] === '?' || p[j] === s[i])) {
+        i++;
+        j++;
+      } else if (j < p.length && p[j] === '*') {
+        star = j++;
+        match = i;
+      } else if (star !== -1) {
+        j = star + 1;
+        i = ++match;
+      } else {
+        return false;
+      }
+    }
+    while (j < p.length && p[j] === '*') j++;
+    return j === p.length;
+  }
+
+  /**
+   * Create an event route for targeted delivery
+   */
+  public createRoute(filter: EventFilter, priority: number = 0): string {
+    const routeId = `route_${++this.routeCounter}`;
+
+    const route: EventRoute = {
+      id: routeId,
+      filter,
+      listeners: new Set(),
+      priority,
+      active: true,
+    };
+
+    this.eventRoutes.set(routeId, route);
+    super.emit('routeCreated', routeId, filter);
+
+    return routeId;
+  }
+
+  /**
+   * Add listener to a route
+   */
+  public addListenerToRoute(routeId: string, listener: EventListener): boolean {
+    const route = this.eventRoutes.get(routeId);
+    if (route) {
+      route.listeners.add(listener);
+      super.emit('listenerAddedToRoute', routeId, listener);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Remove listener from a route
+   */
+  public removeListenerFromRoute(routeId: string, listener: EventListener): boolean {
+    const route = this.eventRoutes.get(routeId);
+    if (route) {
+      const removed = route.listeners.delete(listener);
+      if (removed) {
+        super.emit('listenerRemovedFromRoute', routeId, listener);
+      }
+      return removed;
+    }
+    return false;
+  }
+
+  /**
+   * Activate or deactivate a route
+   */
+  public setRouteActive(routeId: string, active: boolean): boolean {
+    const route = this.eventRoutes.get(routeId);
+    if (route) {
+      route.active = active;
+      super.emit('routeActiveChanged', routeId, active);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Remove a route
+   */
+  public removeRoute(routeId: string): boolean {
+    const removed = this.eventRoutes.delete(routeId);
+    if (removed) {
+      super.emit('routeRemoved', routeId);
+    }
+    return removed;
+  }
+
+  /**
+   * Filter events by criteria
+   */
+  public filterEvents(events: BaseEvent[], filter: EventFilter): BaseEvent[] {
+    return events.filter(event => this.matchesFilter(event, filter));
   }
 
   /**
@@ -420,12 +701,16 @@ export class EventDispatcher extends EventEmitter {
     listenerCount: number;
     queueSize: number;
     isProcessing: boolean;
+    filteredSubscriptionCount: number;
+    routeCount: number;
   } {
     return {
       name: this.name,
       listenerCount: this.getListenerCount(),
       queueSize: this.getQueueSize(),
       isProcessing: this.isProcessing(),
+      filteredSubscriptionCount: this.filteredSubscriptions.size,
+      routeCount: this.eventRoutes.size,
     };
   }
 
@@ -435,6 +720,8 @@ export class EventDispatcher extends EventEmitter {
   public dispose(): void {
     this.clearQueue();
     this.clearAllListeners();
+    this.filteredSubscriptions.clear();
+    this.eventRoutes.clear();
     this.removeAllListeners(); // Clear EventEmitter listeners
   }
 }
