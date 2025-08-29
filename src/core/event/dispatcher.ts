@@ -122,6 +122,7 @@ interface QueuedEvent {
   readonly event: BaseEvent;
   readonly priority: EventPriority;
   readonly timestamp: number;
+  readonly retryCount?: number;
 }
 
 /**
@@ -138,22 +139,93 @@ class EventQueue {
   /**
    * Add event to queue with automatic priority sorting
    */
-  public enqueue(event: BaseEvent): void {
+  public enqueue(event: BaseEvent): boolean {
     const queuedEvent: QueuedEvent = {
       event,
       priority: event.priority,
       timestamp: Date.now(),
+      retryCount: 0,
     };
 
-    // Add to batch buffer first
-    this.batchBuffer.push(queuedEvent);
+    // Check if queue is at capacity
+    if (this.queue.length >= this.config.maxSize) {
+      return this.handleOverflow(queuedEvent);
+    }
 
-    // Check if we should process the batch
-    if (this.shouldProcessBatch()) {
-      this.processBatchBuffer();
-    } else if (!this.batchTimer) {
-      // Start batch timer if not already running
-      this.startBatchTimer();
+    // Insert in priority order (highest priority first)
+    this.insertByPriority(queuedEvent);
+    this.updateMetrics();
+    return true;
+  }
+
+  /**
+   * Insert event by priority order (highest priority first)
+   */
+  private insertByPriority(queuedEvent: QueuedEvent): void {
+    let insertIndex = 0;
+    for (let i = 0; i < this.queue.length; i++) {
+      const item = this.queue[i];
+      if (item && item.priority < queuedEvent.priority) {
+        insertIndex = i;
+        break;
+      }
+      insertIndex = i + 1;
+    }
+
+    this.queue.splice(insertIndex, 0, queuedEvent);
+  }
+
+  /**
+   * Handle queue overflow based on strategy
+   */
+  private handleOverflow(newEvent: QueuedEvent): boolean {
+    switch (this.config.overflowStrategy) {
+      case QueueOverflowStrategy.DROP_INCOMING: {
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+
+      case QueueOverflowStrategy.DROP_OLDEST: {
+        this.queue.shift(); // Remove oldest
+        this.insertByPriority(newEvent);
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return true;
+      }
+
+      case QueueOverflowStrategy.DROP_LOWEST_PRIORITY: {
+        const lowest = this.peekLowest();
+        if (lowest && lowest.priority <= newEvent.priority) {
+          this.popLowest();
+          // Insert directly to avoid re-entering overflow handling
+          this.insertByPriority(newEvent);
+          this.metrics.totalDropped++;
+          this.updateMetrics();
+          return true;
+        }
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+
+      case QueueOverflowStrategy.REJECT: {
+        throw new Error(`Queue overflow: maximum size ${this.config.maxSize} exceeded`);
+      }
+
+      case QueueOverflowStrategy.BLOCK: {
+        // In a real implementation, this would block until space is available
+        // For now, we'll just drop the event
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
+
+      default: {
+        this.metrics.totalDropped++;
+        this.updateMetrics();
+        return false;
+      }
     }
   }
 
@@ -161,7 +233,32 @@ class EventQueue {
    * Remove and return the highest priority event
    */
   public dequeue(): QueuedEvent | undefined {
-    return this.queue.shift();
+    const event = this.queue.shift();
+    if (event) {
+      this.updateMetrics();
+    }
+    return event;
+  }
+
+  /**
+   * Dequeue multiple events for batch processing
+   */
+  public dequeueBatch(maxSize: number = this.config.batchSize): QueuedEvent[] {
+    const batch: QueuedEvent[] = [];
+    const actualSize = Math.min(maxSize, this.queue.length);
+
+    for (let i = 0; i < actualSize; i++) {
+      const event = this.queue.shift();
+      if (event) {
+        batch.push(event);
+      }
+    }
+
+    if (batch.length > 0) {
+      this.updateMetrics();
+    }
+
+    return batch;
   }
 
   /**
@@ -689,11 +786,12 @@ export class EventDispatcher extends EventEmitter {
       // Drop current lowest-priority queued event to make room
       this.eventQueue.popLowest();
     }
-    this.eventQueue.enqueue(event);
 
+    // Start processing if not already processing
     if (!this.processing) {
       await this.processQueue();
     }
+
     // Reflect all dispatched listeners, including filtered and routed
     return this.getAllListenersForEvent(event).length > 0;
   }
@@ -735,20 +833,24 @@ export class EventDispatcher extends EventEmitter {
       await this.eventStorage.saveEvents(events);
     }
     for (const event of events) {
-      if (this.eventQueue.size() >= this.config.maxQueueSize) {
-        const lowest = this.eventQueue.peekLowest();
-        if (lowest && lowest.priority <= event.priority) {
-          this.eventQueue.popLowest();
-          this.eventQueue.enqueue(event);
-        } else {
-          // drop incoming if it's not higher priority
-          continue;
-        }
+      const enqueued = this.eventQueue.enqueue(event);
+      if (enqueued) {
+        enqueuedCount++;
       } else {
-        this.eventQueue.enqueue(event);
+        droppedCount++;
       }
     }
-    if (!this.processing) {
+
+    if (droppedCount > 0) {
+      super.emit('batchDropped', {
+        totalEvents: events.length,
+        enqueuedCount,
+        droppedCount,
+        queueSize: this.eventQueue.size(),
+      });
+    }
+
+    if (!this.processing && enqueuedCount > 0) {
       await this.processQueue();
     }
   }
@@ -928,22 +1030,57 @@ export class EventDispatcher extends EventEmitter {
     }
 
     const startTime = Date.now();
+    let processingSuccessful = true;
 
-    // Process listeners in parallel if async is enabled
-    if (this.config.enableAsync) {
-      const promises = listeners.map(listener => this.callListener(listener, event));
-      await Promise.allSettled(promises);
-    } else {
-      // Process listeners sequentially
-      for (const listener of listeners) {
-        await this.callListener(listener, event);
+    try {
+      // Process listeners in parallel if async is enabled
+      if (this.config.enableAsync) {
+        const promises = listeners.map(listener => this.callListener(listener, event));
+        const results = await Promise.allSettled(promises);
+
+        // Check if any listener failed
+        processingSuccessful = results.every(result => result.status === 'fulfilled');
+      } else {
+        // Process listeners sequentially
+        for (const listener of listeners) {
+          try {
+            await this.callListener(listener, event);
+          } catch (error) {
+            processingSuccessful = false;
+            console.error(
+              `Error processing event ${event.type} with listener ${listener.getName()}:`,
+              error
+            );
+          }
+        }
       }
-    }
 
-    // Check for slow processing
-    const processingTime = Date.now() - startTime;
-    if (processingTime > this.config.maxProcessingTime) {
-      console.warn(`Slow event processing: ${event.type} took ${processingTime}ms`);
+      const processingTime = Date.now() - startTime;
+
+      // Record metrics
+      if (processingSuccessful) {
+        this.eventQueue.recordProcessingSuccess(processingTime);
+      } else {
+        this.eventQueue.recordProcessingFailure();
+      }
+
+      // Check for slow processing
+      if (processingTime > this.config.maxProcessingTime) {
+        console.warn(`Slow event processing: ${event.type} took ${processingTime}ms`);
+        super.emit('slowProcessing', {
+          eventType: event.type,
+          processingTime,
+          threshold: this.config.maxProcessingTime,
+        });
+      }
+    } catch (error) {
+      processingSuccessful = false;
+      this.eventQueue.recordProcessingFailure();
+      console.error(`Critical error processing event ${event.type}:`, error);
+      super.emit('processingError', {
+        eventType: event.type,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -1134,6 +1271,52 @@ export class EventDispatcher extends EventEmitter {
   }
 
   /**
+   * Check if backpressure is active
+   */
+  public isBackpressureActive(): boolean {
+    return this.eventQueue.isBackpressureActive();
+  }
+
+  /**
+   * Get queue metrics
+   */
+  public getQueueMetrics(): QueueMetrics {
+    return this.eventQueue.getMetrics();
+  }
+
+  /**
+   * Reset queue metrics
+   */
+  public resetQueueMetrics(): void {
+    this.eventQueue.resetMetrics();
+  }
+
+  /**
+   * Pause queue processing
+   */
+  public pauseProcessing(): void {
+    this.eventQueue.setProcessingState(QueueProcessingState.PAUSED);
+  }
+
+  /**
+   * Resume queue processing
+   */
+  public async resumeProcessing(): Promise<void> {
+    this.eventQueue.setProcessingState(QueueProcessingState.IDLE);
+    if (!this.processing && !this.eventQueue.isEmpty()) {
+      await this.processQueue();
+    }
+  }
+
+  /**
+   * Drain the queue (process all pending events)
+   */
+  public async drainQueue(): Promise<void> {
+    this.eventQueue.setProcessingState(QueueProcessingState.DRAINING);
+    await this.processQueue();
+  }
+
+  /**
    * Clear all pending events from queue
    */
   public clearQueue(): void {
@@ -1157,6 +1340,8 @@ export class EventDispatcher extends EventEmitter {
     isProcessing: boolean;
     filteredSubscriptionCount: number;
     routeCount: number;
+    queueMetrics: QueueMetrics;
+    backpressureActive: boolean;
   } {
     return {
       name: this.name,
@@ -1165,6 +1350,8 @@ export class EventDispatcher extends EventEmitter {
       isProcessing: this.isProcessing(),
       filteredSubscriptionCount: this.filteredSubscriptions.size,
       routeCount: this.eventRoutes.size,
+      queueMetrics: this.getQueueMetrics(),
+      backpressureActive: this.isBackpressureActive(),
     };
   }
 
