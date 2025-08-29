@@ -411,6 +411,64 @@ const DEFAULT_CONFIG: Required<EventDispatcherConfig> = {
 };
 
 // ============================================================================
+// Event Persistence Interfaces & Utilities
+// ============================================================================
+
+/**
+ * Interface for event storage backends (in-memory, file, DB, etc.)
+ */
+export interface EventStorage {
+  /** Persist a single event */
+  saveEvent(event: BaseEvent): Promise<void>;
+  /** Persist a batch of events */
+  saveEvents(events: BaseEvent[]): Promise<void>;
+  /** Retrieve all events (optionally filtered) */
+  getEvents(filter?: Partial<BaseEvent>): Promise<BaseEvent[]>;
+  /** Clear all stored events */
+  clear(): Promise<void>;
+}
+
+/**
+ * In-memory event storage (default)
+ */
+export class InMemoryEventStorage implements EventStorage {
+  private history: BaseEvent[] = [];
+
+  async saveEvent(event: BaseEvent): Promise<void> {
+    this.history.push(event);
+  }
+  async saveEvents(events: BaseEvent[]): Promise<void> {
+    this.history.push(...events);
+  }
+  async getEvents(filter?: Partial<BaseEvent>): Promise<BaseEvent[]> {
+    if (!filter) return [...this.history];
+    return this.history.filter(e => {
+      for (const key in filter) {
+        if ((e as any)[key] !== (filter as any)[key]) return false;
+      }
+      return true;
+    });
+  }
+  async clear(): Promise<void> {
+    this.history = [];
+  }
+}
+
+/**
+ * Event serialization utility
+ */
+export function serializeEvent(event: BaseEvent): string {
+  return JSON.stringify(event);
+}
+
+/**
+ * Event deserialization utility
+ */
+export function deserializeEvent(json: string): BaseEvent {
+  return JSON.parse(json);
+}
+
+// ============================================================================
 // Core EventDispatcher Class
 // ============================================================================
 
@@ -429,13 +487,21 @@ export class EventDispatcher extends EventEmitter {
   private subscriptionCounter = 0;
   private routeCounter = 0;
 
+  // Event persistence
+  private readonly eventStorage: EventStorage;
+  private readonly enablePersistence: boolean;
+
   constructor(
     public readonly name: string = 'EventDispatcher',
-    config: EventDispatcherConfig = {}
+    config: EventDispatcherConfig = {},
+    eventStorage?: EventStorage,
+    enablePersistence: boolean = true
   ) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.eventQueue = new EventQueue(this.config.batch);
+    this.eventStorage = eventStorage || new InMemoryEventStorage();
+    this.enablePersistence = enablePersistence;
   }
 
   // ============================================================================
@@ -605,9 +671,13 @@ export class EventDispatcher extends EventEmitter {
   // ============================================================================
 
   /**
-   * Emit an event to all subscribers
+   * Emit an event to all subscribers (with persistence)
    */
   public async emitEvent(event: BaseEvent): Promise<boolean> {
+    // Persist event if enabled
+    if (this.enablePersistence) {
+      await this.eventStorage.saveEvent(event);
+    }
     // Enforce max queue size with priority-aware drop policy
     if (this.eventQueue.size() >= this.config.maxQueueSize) {
       const lowest = this.eventQueue.peekLowest();
@@ -658,9 +728,12 @@ export class EventDispatcher extends EventEmitter {
   }
 
   /**
-   * Emit multiple events in batch
+   * Emit multiple events in batch (with persistence)
    */
   public async emitBatch(events: BaseEvent[]): Promise<void> {
+    if (this.enablePersistence) {
+      await this.eventStorage.saveEvents(events);
+    }
     for (const event of events) {
       if (this.eventQueue.size() >= this.config.maxQueueSize) {
         const lowest = this.eventQueue.peekLowest();
@@ -678,6 +751,30 @@ export class EventDispatcher extends EventEmitter {
     if (!this.processing) {
       await this.processQueue();
     }
+  }
+
+  /**
+   * Get all persisted events (optionally filtered)
+   */
+  public async getEventHistory(filter?: Partial<BaseEvent>): Promise<BaseEvent[]> {
+    return this.eventStorage.getEvents(filter);
+  }
+
+  /**
+   * Replay persisted events to listeners (for debugging or recovery)
+   */
+  public async replayEvents(filter?: Partial<BaseEvent>): Promise<void> {
+    const events = await this.getEventHistory(filter);
+    for (const event of events) {
+      this.emitSync(event);
+    }
+  }
+
+  /**
+   * Clear persisted event history
+   */
+  public async clearEventHistory(): Promise<void> {
+    await this.eventStorage.clear();
   }
 
   /**
