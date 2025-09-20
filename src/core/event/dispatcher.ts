@@ -241,9 +241,10 @@ class EventQueue {
   }
 
   /**
-   * Dequeue multiple events for batch processing
+   * Dequeue multiple raw queued events for batch processing
+   * Note: Prefer using dequeueBatch() which returns an EventBatch.
    */
-  public dequeueBatch(maxSize: number = this.config.batchSize): QueuedEvent[] {
+  public dequeueQueuedEvents(maxSize: number = this.batchConfig.maxBatchSize): QueuedEvent[] {
     const batch: QueuedEvent[] = [];
     const actualSize = Math.min(maxSize, this.queue.length);
 
@@ -1050,19 +1051,8 @@ export class EventDispatcher extends EventEmitter {
    */
   private async processInBatches(): Promise<void> {
     while (!this.eventQueue.isEmpty()) {
-      const queuedEvents = this.eventQueue.dequeueBatch();
-      if (queuedEvents) {
-        const batch: EventBatch = {
-          id: `batch_${Date.now()}`,
-          events: queuedEvents.map(qe => qe.event),
-          createdAt: Date.now(),
-          strategy: this.config.batch.strategy,
-          metadata: {
-            totalEvents: queuedEvents.length,
-            priorityDistribution: new Map(),
-            sourceDistribution: new Map(),
-          },
-        };
+      const batch = this.eventQueue.dequeueBatch();
+      if (batch) {
         await this.processBatch(batch);
       }
     }
@@ -1419,7 +1409,7 @@ export class EventDispatcher extends EventEmitter {
 /**
  * Metrics for the event queue
  */
-interface QueueMetrics {
+export interface QueueMetrics {
   totalProcessed: number;
   totalFailed: number;
   averageProcessingTime: number;
@@ -1428,7 +1418,7 @@ interface QueueMetrics {
 /**
  * States for queue processing
  */
-enum QueueProcessingState {
+export enum QueueProcessingState {
   PAUSED = 'paused',
   IDLE = 'idle',
   DRAINING = 'draining',
