@@ -49,7 +49,7 @@ export abstract class EventListener {
   private static readonly listenerRegistry = new WeakSet<EventListener>();
 
   constructor(name: string, errorHandler?: ErrorCallback) {
-    this.id = `listener_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.id = `listener_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     this.name = name;
     this.errorHandler = errorHandler;
 
