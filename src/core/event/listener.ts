@@ -203,6 +203,7 @@ export class SourceInfoEventListener extends EventListener {
   ) {
     super(name, errorHandler);
     this.callback = callback;
+    this.validateCallback();
   }
 
   public async handleEvent(event: BaseEvent): Promise<void> {
@@ -219,6 +220,12 @@ export class SourceInfoEventListener extends EventListener {
       }
     } catch (error) {
       this.handleError(error as Error, event);
+    }
+  }
+
+  private validateCallback(): void {
+    if (typeof this.callback !== 'function') {
+      throw new Error('SourceInfoEventCallback must be a function');
     }
   }
 }
