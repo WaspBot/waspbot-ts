@@ -466,6 +466,40 @@ class EventQueue {
       },
     };
   }
+
+  public recordProcessingSuccess(processingTime: number): void {
+    // Placeholder implementation for recording processing success
+    console.log(`Processing succeeded in ${processingTime}ms`);
+  }
+
+  public recordProcessingFailure(): void {
+    // Placeholder implementation for recording processing failure
+    console.error(`Processing failed`);
+  }
+
+  public isBackpressureActive(): boolean {
+    // Placeholder implementation for backpressure check
+    return this.queue.length > this.batchConfig.maxBatchSize;
+  }
+
+  public getMetrics(): QueueMetrics {
+    // Placeholder implementation for retrieving queue metrics
+    return {
+      totalProcessed: 0,
+      totalFailed: 0,
+      averageProcessingTime: 0,
+    };
+  }
+
+  public resetMetrics(): void {
+    // Placeholder implementation for resetting metrics
+    console.log(`Metrics reset`);
+  }
+
+  public setProcessingState(state: QueueProcessingState): void {
+    // Placeholder implementation for setting processing state
+    console.log(`Processing state set to ${state}`);
+  }
 }
 
 // ============================================================================
@@ -577,6 +611,7 @@ export class EventDispatcher extends EventEmitter {
   private readonly config: Required<EventDispatcherConfig>;
   private readonly eventQueue: EventQueue;
   private processing = false;
+  private processingLock: Promise<void> | null = null;
 
   // Event filtering and routing
   private readonly filteredSubscriptions = new Map<string, FilteredSubscription>();
@@ -775,24 +810,25 @@ export class EventDispatcher extends EventEmitter {
     if (this.enablePersistence) {
       await this.eventStorage.saveEvent(event);
     }
+
     // Enforce max queue size with priority-aware drop policy
     if (this.eventQueue.size() >= this.config.maxQueueSize) {
       const lowest = this.eventQueue.peekLowest();
       if (!lowest || lowest.priority > event.priority) {
-        // Drop incoming low-priority event
-        // Reflect all dispatched listeners, including filtered and routed
         return this.getAllListenersForEvent(event).length > 0;
       }
-      // Drop current lowest-priority queued event to make room
       this.eventQueue.popLowest();
     }
 
     // Start processing if not already processing
-    if (!this.processing) {
-      await this.processQueue();
+    if (!this.processingLock) {
+      this.processingLock = this.processQueue().finally(() => {
+        this.processingLock = null;
+      });
     }
 
-    // Reflect all dispatched listeners, including filtered and routed
+    await this.processingLock;
+
     return this.getAllListenersForEvent(event).length > 0;
   }
 
@@ -1014,8 +1050,19 @@ export class EventDispatcher extends EventEmitter {
    */
   private async processInBatches(): Promise<void> {
     while (!this.eventQueue.isEmpty()) {
-      const batch = this.eventQueue.dequeueBatch();
-      if (batch) {
+      const queuedEvents = this.eventQueue.dequeueBatch();
+      if (queuedEvents) {
+        const batch: EventBatch = {
+          id: `batch_${Date.now()}`,
+          events: queuedEvents.map(qe => qe.event),
+          createdAt: Date.now(),
+          strategy: this.config.batch.strategy,
+          metadata: {
+            totalEvents: queuedEvents.length,
+            priorityDistribution: new Map(),
+            sourceDistribution: new Map(),
+          },
+        };
         await this.processBatch(batch);
       }
     }
@@ -1367,4 +1414,22 @@ export class EventDispatcher extends EventEmitter {
     this.eventRoutes.clear();
     this.removeAllListeners(); // Clear EventEmitter listeners
   }
+}
+
+/**
+ * Metrics for the event queue
+ */
+interface QueueMetrics {
+  totalProcessed: number;
+  totalFailed: number;
+  averageProcessingTime: number;
+}
+
+/**
+ * States for queue processing
+ */
+enum QueueProcessingState {
+  PAUSED = 'paused',
+  IDLE = 'idle',
+  DRAINING = 'draining',
 }
