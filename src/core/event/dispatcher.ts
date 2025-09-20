@@ -829,6 +829,8 @@ export class EventDispatcher extends EventEmitter {
    * Emit multiple events in batch (with persistence)
    */
   public async emitBatch(events: BaseEvent[]): Promise<void> {
+    let enqueuedCount = 0, droppedCount = 0;
+    
     if (this.enablePersistence) {
       await this.eventStorage.saveEvents(events);
     }
