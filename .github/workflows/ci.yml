@@ -2,16 +2,16 @@ name: CI - Lint and Type Check
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   lint-and-typecheck:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
+        node-version: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
