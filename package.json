@@ -9,7 +9,6 @@
     "dev": "tsc --watch",
     "lint": "eslint src/**/*.ts --fix",
     "lint:check": "eslint src/**/*.ts",
-    "lint:new": "eslint src/connectors/base-connector.ts src/types/**/*.ts",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
@@ -43,6 +42,7 @@
     "npm": ">=8.0.0"
   },
   "devDependencies": {
+    "@types/json-schema": "^7.0.15",
     "@types/node": "^20.8.0",
     "@types/uuid": "^9.0.5",
     "@types/ws": "^8.5.6",
