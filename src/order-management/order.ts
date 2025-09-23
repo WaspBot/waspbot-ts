@@ -19,7 +19,7 @@ import {
   TradingPair,
   Fee,
   WaspBotError,
-} from './common.js';
+} from '../types/common.js';
 
 // ============================================================================
 // Order State Management
