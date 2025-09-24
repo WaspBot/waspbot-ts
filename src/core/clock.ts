@@ -5,5 +5,17 @@
 
 // TODO: Implement clock system
 export class Clock {
-  // Placeholder
+  constructor() {
+    // Initialization code here
+  }
+
+  // Method to schedule an event
+  scheduleEvent(event: () => void, delay: number): void {
+    setTimeout(event, delay);
+  }
+
+  // Method to get the current time
+  getCurrentTime(): Date {
+    return new Date();
+  }
 }
