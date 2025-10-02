@@ -1,7 +1,21 @@
 /**
  * Example: Arbitrage Bot
  * 
- * This example demonstrates how to use the ArbitrageStrategy to detect and execute
+ * This example demonstrates how to use the ArbitrageStrategy to dete  async cancelOrder(orderId: string, symbol: string): Promise<any> {
+    return {
+      id: orderId,
+      symbol,
+      status: 'cancelled',
+      timestamp: Date.now(),
+    };
+  }
+
+  async getTradingFees(): Promise<any> {
+    return {
+      maker: new Decimal(0.001),
+      taker: new Decimal(0.001),
+    };
+  }xecute
  * arbitrage opportunities across multiple exchanges.
  * 
  * Features demonstrated:
@@ -17,6 +31,138 @@ import { BaseConnector } from '../src/connectors/base-connector.js';
 import { Logger } from '../src/core/logger.js';
 
 /**
+ * Mock connector for dry-run mode
+ * Provides minimal implementation for strategy construction and testing
+ */
+class MockConnector extends BaseConnector {
+  async connect(): Promise<void> {
+    this.status = 'connected' as any; // Use string to avoid enum import
+    Logger.info(`Mock connector for ${this.exchangeId} connected (dry-run)`);
+  }
+
+  async disconnect(): Promise<void> {
+    this.status = 'disconnected' as any;
+    Logger.info(`Mock connector for ${this.exchangeId} disconnected (dry-run)`);
+  }
+
+  async reconnect(): Promise<void> {
+    await this.connect();
+  }
+
+  async getTradingPairs(): Promise<any[]> {
+    return [];
+  }
+
+  async getTicker(symbol: string): Promise<any> {
+    return {
+      symbol,
+      price: new Decimal(50000),
+      timestamp: Date.now(),
+    };
+  }
+
+  async getOrderBook(symbol: string, limit?: number): Promise<any> {
+    return {
+      symbol,
+      bids: [],
+      asks: [],
+      timestamp: Date.now(),
+    };
+  }
+
+  async getTrades(symbol: string, limit?: number): Promise<any[]> {
+    return [];
+  }
+
+  async subscribeToTicker(symbol: string): Promise<void> {
+    // No-op for mock
+  }
+
+  async unsubscribeFromTicker(symbol: string): Promise<void> {
+    // No-op for mock
+  }
+
+  async subscribeToOrderBook(symbol: string): Promise<void> {
+    // No-op for mock
+  }
+
+  async unsubscribeFromOrderBook(symbol: string): Promise<void> {
+    // No-op for mock
+  }
+
+  async subscribeToTrades(symbol: string): Promise<void> {
+    // No-op for mock
+  }
+
+  async unsubscribeFromTrades(symbol: string): Promise<void> {
+    // No-op for mock
+  }
+
+  async placeOrder(request: any): Promise<any> {
+    return {
+      id: `mock-order-${Date.now()}`,
+      symbol: request.symbol,
+      side: request.side,
+      type: request.type,
+      quantity: request.quantity,
+      price: request.price,
+      status: 'filled',
+      timestamp: Date.now(),
+    };
+  }
+
+  async cancelOrder(orderId: string, symbol: string): Promise<any> {
+    return {
+      id: orderId,
+      symbol,
+      status: 'cancelled',
+      timestamp: Date.now(),
+    };
+  }
+
+  async cancelAllOrders(symbol?: string): Promise<any[]> {
+    return [];
+  }
+
+  async getOrder(orderId: string, symbol: string): Promise<any> {
+    return {
+      id: orderId,
+      symbol,
+      status: 'filled',
+      timestamp: Date.now(),
+    };
+  }
+
+  async getOpenOrders(symbol?: string): Promise<any[]> {
+    return [];
+  }
+
+  async getOrderHistory(symbol?: string, limit?: number): Promise<any[]> {
+    return [];
+  }
+
+  async getBalances(): Promise<any[]> {
+    return [];
+  }
+
+  async getBalance(asset: string): Promise<any> {
+    return {
+      asset,
+      free: new Decimal(1000),
+      locked: new Decimal(0),
+      total: new Decimal(1000),
+    };
+  }
+
+  async getTradingFees(): Promise<any> {
+    return {
+      maker: new Decimal(0.001),
+      taker: new Decimal(0.001),
+    };
+  }
+}
+
+/**
  * Main function to run the arbitrage bot
  */
 async function main() {
@@ -29,32 +175,9 @@ async function main() {
   Logger.info('Initializing exchange connectors...');
 
   // Note: In production, you would import and initialize actual connectors
-  // For this example, we'll show the structure
+  // For this example, we'll initialize connectors after configuration
   
   const connectors = new Map<string, BaseConnector>();
-
-  // Example: Initialize Binance connector
-  // const binanceConnector = new BinanceConnector({
-  //   exchangeId: 'binance',
-  //   apiKey: process.env.BINANCE_API_KEY,
-  //   apiSecret: process.env.BINANCE_API_SECRET,
-  //   testnet: false,
-  // });
-  // await binanceConnector.connect();
-  // connectors.set('binance', binanceConnector);
-
-  // Example: Initialize KuCoin connector
-  // const kucoinConnector = new KuCoinConnector({
-  //   exchangeId: 'kucoin',
-  //   apiKey: process.env.KUCOIN_API_KEY,
-  //   apiSecret: process.env.KUCOIN_API_SECRET,
-  //   passphrase: process.env.KUCOIN_PASSPHRASE,
-  //   testnet: false,
-  // });
-  // await kucoinConnector.connect();
-  // connectors.set('kucoin', kucoinConnector);
-
-  Logger.info(`Initialized ${connectors.size} exchange connectors`);
 
   // ============================================================================
   // Step 2: Configure Arbitrage Strategy
@@ -128,6 +251,41 @@ async function main() {
   Logger.info(`  - Exchanges: ${arbitrageConfig.exchanges.join(', ')}`);
   Logger.info(`  - Min Profit: ${arbitrageConfig.minProfitThreshold.mul(100).toFixed(2)}%`);
   Logger.info(`  - Dry Run: ${arbitrageConfig.dryRun ? 'YES' : 'NO'}`);
+
+  // Initialize connectors based on configuration
+  if (arbitrageConfig.dryRun) {
+    Logger.info('Using mock connectors for dry-run mode...');
+    for (const exchangeId of arbitrageConfig.exchanges) {
+      const mockConnector = new MockConnector({
+        exchangeId,
+        testnet: true,
+      });
+      connectors.set(exchangeId, mockConnector);
+    }
+  } else {
+    // Example: Initialize Binance connector
+    // const binanceConnector = new BinanceConnector({
+    //   exchangeId: 'binance',
+    //   apiKey: process.env.BINANCE_API_KEY,
+    //   apiSecret: process.env.BINANCE_API_SECRET,
+    //   testnet: false,
+    // });
+    // await binanceConnector.connect();
+    // connectors.set('binance', binanceConnector);
+
+    // Example: Initialize KuCoin connector
+    // const kucoinConnector = new KuCoinConnector({
+    //   exchangeId: 'kucoin',
+    //   apiKey: process.env.KUCOIN_API_KEY,
+    //   apiSecret: process.env.KUCOIN_API_SECRET,
+    //   passphrase: process.env.KUCOIN_PASSPHRASE,
+    //   testnet: false,
+    // });
+    // await kucoinConnector.connect();
+    // connectors.set('kucoin', kucoinConnector);
+  }
+
+  Logger.info(`Initialized ${connectors.size} exchange connectors`);
 
   // ============================================================================
   // Step 3: Create and Configure Strategy Instance
