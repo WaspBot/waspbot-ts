@@ -3,6 +3,8 @@
  * Handles event/tick scheduling
  */
 
+import { DateTime } from 'luxon';
+
 // TODO: Implement clock system
 export class Clock {
   constructor() {
@@ -15,7 +17,13 @@ export class Clock {
   }
 
   // Method to get the current time
-  getCurrentTime(): Date {
+  getCurrentTime(timezone?: string): Date {
+    if (timezone) {
+      if (!DateTime.local().setZone(timezone).isValid) {
+        throw new Error(`Invalid timezone provided: ${timezone}`);
+      }
+      return DateTime.now().setZone(timezone).toJSDate();
+    }
     return new Date();
   }
 }
