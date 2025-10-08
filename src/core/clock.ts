@@ -19,10 +19,11 @@ export class Clock {
   // Method to get the current time
   getCurrentTime(timezone?: string): Date {
     if (timezone) {
-      if (!DateTime.local().setZone(timezone).isValid) {
+      const dt = DateTime.now().setZone(timezone);
+      if (!dt.isValid) {
         throw new Error(`Invalid timezone provided: ${timezone}`);
       }
-      return DateTime.now().setZone(timezone).toJSDate();
+      return dt.toJSDate();
     }
     return new Date();
   }
