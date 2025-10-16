@@ -7,25 +7,13 @@
  */
 
 import { EventEmitter } from 'events';
-import {
-  ExchangeId,
-  TradingPair,
-  ConnectorStatus,
-  OrderId,
-  TradingSide,
-  OrderType,
-  TimeInForce,
-  Price,
-  Quantity,
-  DecimalAmount,
-  Timestamp,
-  ConnectorError,
-  HealthStatus,
+import { HealthStatus,
   ValidationResult,
 } from '../types/common.js';
 import { Ticker, Trade, TradingPairInfo } from '../market-data/ticker.js';
 import { OrderBook } from '../market-data/order-book.js';
 import { Order } from '../order-management/order.js';
+import { clamp } from '../utils/math.js';
 
 /**
  * Configuration interface for connector initialization
@@ -369,7 +357,7 @@ export abstract class BaseConnector extends EventEmitter {
       ));
 
       // Wait before next attempt
-      const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+      const delay = clamp(1000 * Math.pow(2, this.reconnectAttempts), 0, 30000);
       setTimeout(() => this.handleReconnection(), delay);
     }
   }
