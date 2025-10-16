@@ -6,7 +6,7 @@
  * market data subscriptions, and account management across different exchanges.
  */
 
-import { EventEmitter } from 'node:events';
+import { EventEmitter } from 'events';
 import {
   ExchangeId,
   TradingPair,
