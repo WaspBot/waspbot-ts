@@ -1,10 +1,27 @@
 import { OrderManager, OrderPlacementResult } from '../types/orders-management';
-import { CreateOrderRequest, OrderState } from '../types/orders-basic';
+import { CreateOrderRequest, OrderState, validateCreateOrderRequest } from '../types/orders-basic';
+import { WaspBotError } from '../types/common';
 
 export class SimpleOrderManager implements OrderManager {
   private orders: Map<string, any> = new Map();
 
   async placeOrder(request: CreateOrderRequest): Promise<OrderPlacementResult> {
+    try {
+      validateCreateOrderRequest(request);
+    } catch (error) {
+      if (error instanceof WaspBotError) {
+        return {
+          success: false,
+          clientOrderId: request.clientOrderId,
+          error: error.message,
+          timestamp: Date.now(),
+        };
+      } else {
+        // Re-throw unexpected errors
+        throw error;
+      }
+    }
+
     // Simulate order placement
     this.orders.set(request.clientOrderId, {
       ...request,
