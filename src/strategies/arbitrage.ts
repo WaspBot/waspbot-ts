@@ -27,7 +27,7 @@ import {
   StrategyStatus,
   StrategyError,
 } from '../types/common.js';
-import { Ticker } from '../market-data/ticker.js';
+import { clamp, safeDivide } from '../utils/math.js';
 
 /**
  * Configuration for the arbitrage strategy
@@ -615,7 +615,7 @@ export class ArbitrageStrategy extends EventEmitter {
       confidence *= 0.7;
     }
 
-    return Math.max(0, Math.min(1, confidence));
+    return clamp(confidence, 0, 1);
   }
 
   /**
@@ -719,7 +719,7 @@ export class ArbitrageStrategy extends EventEmitter {
 
       // Update average execution time
       const totalTime = this.executionHistory.reduce((sum, r) => sum + r.executionTime, 0);
-      this.metrics.averageExecutionTime = totalTime / this.executionHistory.length;
+      this.metrics.averageExecutionTime = safeDivide(totalTime, this.executionHistory.length);
     }
   }
 
@@ -781,7 +781,7 @@ export class ArbitrageStrategy extends EventEmitter {
   public getMetrics(): ArbitrageMetrics {
     // Calculate win rate
     if (this.metrics.executedTrades > 0) {
-      this.metrics.winRate = this.metrics.successfulTrades / this.metrics.executedTrades;
+      this.metrics.winRate = safeDivide(this.metrics.successfulTrades, this.metrics.executedTrades);
     }
 
     // Calculate net profit

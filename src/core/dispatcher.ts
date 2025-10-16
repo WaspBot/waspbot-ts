@@ -6,6 +6,7 @@
 import { EventEmitter } from 'events';
 import { EventListener } from './listener.js';
 import { BaseEvent, EventPriority } from './events.js';
+import { clamp } from '../utils/math.js';
 
 // ============================================================================
 // Event Filtering and Routing Types
@@ -246,7 +247,7 @@ class EventQueue {
    */
   public dequeueQueuedEvents(maxSize: number = this.batchConfig.maxBatchSize): QueuedEvent[] {
     const batch: QueuedEvent[] = [];
-    const actualSize = Math.min(maxSize, this.queue.length);
+    const actualSize = clamp(maxSize, 0, this.queue.length);
 
     for (let i = 0; i < actualSize; i++) {
       const event = this.queue.shift();
@@ -341,7 +342,7 @@ class EventQueue {
       return undefined;
     }
 
-    const batchSize = Math.min(this.batchConfig.maxBatchSize, this.queue.length);
+    const batchSize = clamp(this.batchConfig.maxBatchSize, 0, this.queue.length);
     const events = this.queue.splice(0, batchSize).map(qe => qe.event);
 
     return this.createEventBatch(events);
