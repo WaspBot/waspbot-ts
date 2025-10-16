@@ -35,6 +35,7 @@ import {
   InFlightOrder,
   OrderUpdate,
   TradeUpdate,
+  validateCreateOrderRequest,
 } from './orders-basic.js';
 
 import {
