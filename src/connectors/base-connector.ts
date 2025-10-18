@@ -76,7 +76,20 @@ export interface OrderRequest {
 }
 
 /**
- * Abstract base class for all exchange connectors
+ * Abstract base class for all exchange connectors.
+ * Extends EventEmitter to provide a standardized way of emitting events related to
+ * connection status, market data, and trading operations.
+ *
+ * Emits the following events:
+ * - 'statusChanged': When the connector's internal status changes.
+ * - 'connected': When the connector successfully establishes a connection.
+ * - 'disconnected': When the connector disconnects.
+ * - 'error': When an error occurs within the connector.
+ * - 'ticker': When new ticker data is received (if subscribed).
+ * - 'orderBook': When new order book data is received (if subscribed).
+ * - 'trade': When new trade data is received (if subscribed).
+ * - 'orderUpdate': When an order's status changes (e.g., filled, canceled).
+ * - 'balanceUpdate': When account balances change.
  */
 export abstract class BaseConnector extends EventEmitter {
   protected readonly config: ConnectorConfig;
@@ -85,6 +98,10 @@ export abstract class BaseConnector extends EventEmitter {
   protected reconnectAttempts: number = 0;
   protected maxReconnectAttempts: number = 5;
 
+  /**
+   * Creates an instance of BaseConnector.
+   * @param config The configuration object for the connector.
+   */
   constructor(config: ConnectorConfig) {
     super();
     this.config = config;
@@ -121,17 +138,24 @@ export abstract class BaseConnector extends EventEmitter {
   // ============================================================================
 
   /**
-   * Connect to the exchange
+   * Establishes a connection to the exchange. This method should handle all necessary
+   * authentication and WebSocket/REST API initialization.
+   * Emits a 'connected' event upon successful connection.
+   * @returns A Promise that resolves when the connection is successfully established.
    */
   abstract connect(): Promise<void>;
 
   /**
-   * Disconnect from the exchange
+   * Terminates the connection to the exchange and cleans up any resources.
+   * Emits a 'disconnected' event upon successful disconnection.
+   * @returns A Promise that resolves when the disconnection is complete.
    */
   abstract disconnect(): Promise<void>;
 
   /**
-   * Reconnect to the exchange
+   * Attempts to re-establish a lost connection to the exchange.
+   * This method is typically called internally by the connector's reconnection logic.
+   * @returns A Promise that resolves when the reconnection is successful.
    */
   abstract reconnect(): Promise<void>;
 
@@ -140,52 +164,76 @@ export abstract class BaseConnector extends EventEmitter {
   // ============================================================================
 
   /**
-   * Get list of available trading pairs
+   * Retrieves a list of all available trading pairs on the exchange, along with their information.
+   * @returns A Promise that resolves with an array of TradingPairInfo objects.
    */
   abstract getTradingPairs(): Promise<TradingPairInfo[]>;
 
   /**
-   * Get current ticker for a trading pair
+   * Retrieves the current ticker information for a specific trading pair.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @returns A Promise that resolves with a Ticker object.
    */
   abstract getTicker(symbol: TradingPair): Promise<Ticker>;
 
   /**
-   * Get order book for a trading pair
+   * Retrieves the current order book for a specific trading pair.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @param limit Optional. The maximum number of order book entries to retrieve.
+   * @returns A Promise that resolves with an OrderBook object.
    */
   abstract getOrderBook(symbol: TradingPair, limit?: number): Promise<OrderBook>;
 
   /**
-   * Get recent trades for a trading pair
+   * Retrieves recent trades for a specific trading pair.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @param limit Optional. The maximum number of trades to retrieve.
+   * @returns A Promise that resolves with an array of Trade objects.
    */
   abstract getTrades(symbol: TradingPair, limit?: number): Promise<Trade[]>;
 
   /**
-   * Subscribe to ticker updates
+   * Subscribes to real-time ticker updates for a specific trading pair.
+   * Emits 'ticker' events with Ticker objects when updates are received.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @returns A Promise that resolves when the subscription is successful.
    */
   abstract subscribeToTicker(symbol: TradingPair): Promise<void>;
 
   /**
-   * Unsubscribe from ticker updates
+   * Unsubscribes from real-time ticker updates for a specific trading pair.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @returns A Promise that resolves when the unsubscription is successful.
    */
   abstract unsubscribeFromTicker(symbol: TradingPair): Promise<void>;
 
   /**
-   * Subscribe to order book updates
+   * Subscribes to real-time order book updates for a specific trading pair.
+   * Emits 'orderBook' events with OrderBook objects when updates are received.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @returns A Promise that resolves when the subscription is successful.
    */
   abstract subscribeToOrderBook(symbol: TradingPair): Promise<void>;
 
   /**
-   * Unsubscribe from order book updates
+   * Unsubscribes from real-time order book updates for a specific trading pair.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @returns A Promise that resolves when the unsubscription is successful.
    */
   abstract unsubscribeFromOrderBook(symbol: TradingPair): Promise<void>;
 
   /**
-   * Subscribe to trade updates
+   * Subscribes to real-time trade updates for a specific trading pair.
+   * Emits 'trade' events with Trade objects when updates are received.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @returns A Promise that resolves when the subscription is successful.
    */
   abstract subscribeToTrades(symbol: TradingPair): Promise<void>;
 
   /**
-   * Unsubscribe from trade updates
+   * Unsubscribes from real-time trade updates for a specific trading pair.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @returns A Promise that resolves when the unsubscription is successful.
    */
   abstract unsubscribeFromTrades(symbol: TradingPair): Promise<void>;
 
@@ -194,32 +242,50 @@ export abstract class BaseConnector extends EventEmitter {
   // ============================================================================
 
   /**
-   * Place a new order
+   * Places a new order on the exchange.
+   * Emits an 'orderUpdate' event with the new order status.
+   * @param request The OrderRequest object containing details for the order.
+   * @returns A Promise that resolves with the created Order object.
    */
   abstract placeOrder(request: OrderRequest): Promise<Order>;
 
   /**
-   * Cancel an existing order
+   * Cancels an existing order on the exchange.
+   * Emits an 'orderUpdate' event with the updated order status (e.g., CANCELED).
+   * @param orderId The ID of the order to cancel.
+   * @param symbol The trading pair of the order.
+   * @returns A Promise that resolves with the canceled Order object.
    */
   abstract cancelOrder(orderId: OrderId, symbol: TradingPair): Promise<Order>;
 
   /**
-   * Cancel all open orders for a symbol
+   * Cancels all open orders for a specific trading pair, or all open orders across all pairs if no symbol is provided.
+   * Emits 'orderUpdate' events for each canceled order.
+   * @param symbol Optional. The trading pair symbol to cancel orders for. If omitted, all open orders are canceled.
+   * @returns A Promise that resolves with an array of canceled Order objects.
    */
   abstract cancelAllOrders(symbol?: TradingPair): Promise<Order[]>;
 
   /**
-   * Get order status
+   * Retrieves the status of a specific order.
+   * @param orderId The ID of the order to retrieve.
+   * @param symbol The trading pair of the order.
+   * @returns A Promise that resolves with the Order object.
    */
   abstract getOrder(orderId: OrderId, symbol: TradingPair): Promise<Order>;
 
   /**
-   * Get all open orders
+   * Retrieves all currently open orders for a specific trading pair, or all open orders across all pairs if no symbol is provided.
+   * @param symbol Optional. The trading pair symbol to retrieve open orders for. If omitted, all open orders are returned.
+   * @returns A Promise that resolves with an array of Order objects.
    */
   abstract getOpenOrders(symbol?: TradingPair): Promise<Order[]>;
 
   /**
-   * Get order history
+   * Retrieves the historical orders for a specific trading pair, or all historical orders across all pairs if no symbol is provided.
+   * @param symbol Optional. The trading pair symbol to retrieve order history for. If omitted, all historical orders are returned.
+   * @param limit Optional. The maximum number of historical orders to retrieve.
+   * @returns A Promise that resolves with an array of Order objects.
    */
   abstract getOrderHistory(symbol?: TradingPair, limit?: number): Promise<Order[]>;
 
@@ -228,17 +294,23 @@ export abstract class BaseConnector extends EventEmitter {
   // ============================================================================
 
   /**
-   * Get account balances
+   * Retrieves all account balances for the connected exchange.
+   * Emits a 'balanceUpdate' event when balances change.
+   * @returns A Promise that resolves with an array of AccountBalance objects.
    */
   abstract getBalances(): Promise<AccountBalance[]>;
 
   /**
-   * Get balance for a specific asset
+   * Retrieves the account balance for a specific asset.
+   * @param asset The asset symbol (e.g., 'BTC', 'USDT').
+   * @returns A Promise that resolves with an AccountBalance object for the specified asset.
    */
   abstract getBalance(asset: string): Promise<AccountBalance>;
 
   /**
-   * Get trading fees for a symbol
+   * Retrieves the trading fees for a specific trading pair.
+   * @param symbol The trading pair symbol (e.g., 'BTC/USDT').
+   * @returns A Promise that resolves with a TradingFees object.
    */
   abstract getTradingFees(symbol: TradingPair): Promise<TradingFees>;
 
@@ -302,7 +374,15 @@ export abstract class BaseConnector extends EventEmitter {
   }
 
   /**
-   * Update connector status and emit events
+   * Updates the connector's internal status and emits corresponding events.
+   * @param newStatus The new status of the connector.
+   * @param reason Optional. A reason for the status change.
+   *
+   * Emits:
+   * - 'statusChanged': { exchangeId: ExchangeId, previousStatus: ConnectorStatus, currentStatus: ConnectorStatus, timestamp: Timestamp, reason?: string }
+   * - 'connected': { exchangeId: ExchangeId } (if newStatus is CONNECTED)
+   * - 'disconnected': { exchangeId: ExchangeId, reason?: string } (if newStatus is DISCONNECTED)
+   * - 'error': ConnectorError (if newStatus is ERROR)
    */
   protected updateStatus(newStatus: ConnectorStatus, reason?: string): void {
     const previousStatus = this.status;
@@ -335,7 +415,10 @@ export abstract class BaseConnector extends EventEmitter {
   }
 
   /**
-   * Handle reconnection logic
+   * Handles the reconnection logic, including retry attempts with exponential backoff.
+   * If max reconnection attempts are exceeded, the connector status is set to ERROR.
+   * Emits 'error' events if reconnection attempts fail.
+   * @returns A Promise that resolves when reconnection is attempted (successfully or not).
    */
   protected async handleReconnection(): Promise<void> {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
@@ -363,7 +446,10 @@ export abstract class BaseConnector extends EventEmitter {
   }
 
   /**
-   * Emit error event with proper formatting
+   * Emits an error event with a standardized ConnectorError object.
+   * @param message A descriptive error message.
+   * @param error Optional. The original error object, if any.
+   * @param context Optional. Additional context to include in the error details.
    */
   protected emitError(message: string, error?: Error, context?: Record<string, unknown>): void {
     const connectorError = new ConnectorError(message, this.exchangeId, {
