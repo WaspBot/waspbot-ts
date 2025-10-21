@@ -189,11 +189,60 @@ export class BinanceConnector extends BaseConnector {
 
 
   public async getTicker(symbol: TradingPair): Promise<Ticker> {
+    try {
+      const response = await this.makeRequest<any>('get', '/api/v3/ticker/24hr', { symbol });
 
-    Logger.warn(`BinanceConnector: getTicker not fully implemented for ${symbol}.`);
+      if (!response || typeof response !== 'object') {
+        Logger.error(`BinanceConnector: Invalid response structure for ${symbol}. Response: ${JSON.stringify(response)}`);
+        throw new Error(`Invalid ticker response for ${symbol}`);
+      }
 
-    return {} as Ticker;
+      // Validate essential fields
+      const requiredFields = [
+        'symbol', 'openPrice', 'highPrice', 'lowPrice', 'lastPrice',
+        'volume', 'quoteVolume', 'priceChange', 'priceChangePercent',
+        'weightedAvgPrice', 'openTime', 'closeTime', 'count',
+      ];
 
+      for (const field of requiredFields) {
+        if (!(field in response) || response[field] === null || response[field] === undefined) {
+          Logger.error(`BinanceConnector: Missing or malformed field '${field}' in ticker data for ${symbol}. Response: ${JSON.stringify(response)}`);
+          throw new Error(`Missing required field '${field}' in ticker data for ${symbol}`);
+        }
+      }
+
+      // Map Binance API response to Ticker interface
+      const ticker: Ticker = {
+        exchangeId: this.exchangeId,
+        symbol: response.symbol,
+        openPrice: response.openPrice,
+        highPrice: response.highPrice,
+        lowPrice: response.lowPrice,
+        lastPrice: response.lastPrice,
+        volume: response.volume,
+        quoteVolume: response.quoteVolume,
+        priceChange: response.priceChange,
+        priceChangePercent: response.priceChangePercent,
+        weightedAvgPrice: response.weightedAvgPrice,
+        prevClosePrice: response.prevClosePrice,
+        lastQuantity: response.lastQty,
+        bidPrice: response.bidPrice,
+        bidQuantity: response.bidQty,
+        askPrice: response.askPrice,
+        askQuantity: response.askQty,
+        openTime: response.openTime,
+        closeTime: response.closeTime,
+        firstId: response.firstId,
+        lastId: response.lastId,
+        count: response.count,
+        timestamp: Date.now(), // Use current timestamp for when data was received
+      };
+
+      return ticker;
+    } catch (error) {
+      Logger.error(`BinanceConnector: Failed to get ticker for ${symbol}. Error: ${error}`);
+      throw error; // Re-throw the error
+    }
   }
 
 
