@@ -22,7 +22,7 @@ describe('BinanceConnector', () => {
   const mockConfig: ConnectorConfig = {
     exchangeId: 'binance',
     apiKey: 'test_api_key',
-    secretKey: 'test_secret_key',
+    apiSecret: 'test_secret_key',
   };
 
   beforeEach(() => {
