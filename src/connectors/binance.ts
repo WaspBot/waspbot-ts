@@ -192,6 +192,11 @@ export class BinanceConnector extends BaseConnector {
     try {
       const response = await this.makeRequest<any>('get', '/api/v3/ticker/24hr', { symbol });
 
+      if (!response || typeof response !== 'object') {
+        Logger.error(`BinanceConnector: Invalid response structure for ${symbol}. Response: ${JSON.stringify(response)}`);
+        throw new Error(`Invalid ticker response for ${symbol}`);
+      }
+
       // Validate essential fields
       const requiredFields = [
         'symbol', 'openPrice', 'highPrice', 'lowPrice', 'lastPrice',
@@ -202,7 +207,7 @@ export class BinanceConnector extends BaseConnector {
       for (const field of requiredFields) {
         if (!(field in response) || response[field] === null || response[field] === undefined) {
           Logger.error(`BinanceConnector: Missing or malformed field '${field}' in ticker data for ${symbol}. Response: ${JSON.stringify(response)}`);
-          return {} as Ticker; // Early return malformed data
+          throw new Error(`Missing required field '${field}' in ticker data for ${symbol}`);
         }
       }
 
@@ -236,7 +241,7 @@ export class BinanceConnector extends BaseConnector {
       return ticker;
     } catch (error) {
       Logger.error(`BinanceConnector: Failed to get ticker for ${symbol}. Error: ${error}`);
-      return {} as Ticker; // Return empty Ticker on error
+      throw error; // Re-throw the error
     }
   }
 
