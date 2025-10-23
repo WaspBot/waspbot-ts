@@ -12,6 +12,8 @@ export class WsClient {
   private retryDelayMs: number;
   private reconnectAttempts: number = 0;
   private isConnected: boolean = false;
+  private reconnectCounter: number = 0;
+  private lastReconnectTimestamp: Date | null = null;
   private messageListeners: ((message: string) => void)[] = [];
 
   constructor(url: string, maxRetries: number = 3, retryDelayMs: number = 1000) {
@@ -49,6 +51,8 @@ export class WsClient {
       Logger.warn(`WsClient: Disconnected from ${this.url} (Code: ${event.code}, Reason: ${event.reason})`);
       if (this.reconnectAttempts < this.maxRetries) {
         this.reconnectAttempts++;
+        this.reconnectCounter++;
+        this.lastReconnectTimestamp = new Date();
         const delay = this.retryDelayMs * Math.pow(2, this.reconnectAttempts - 1);
         Logger.info(`WsClient: Retrying connection to ${this.url} in ${delay}ms... (Attempt ${this.reconnectAttempts}/${this.maxRetries})`);
         setTimeout(() => this.connect(), delay);
@@ -81,5 +85,13 @@ export class WsClient {
 
   public getIsConnected(): boolean {
     return this.isConnected;
+  }
+
+  public getReconnectCounter(): number {
+    return this.reconnectCounter;
+  }
+
+  public getLastReconnectTimestamp(): Date | null {
+    return this.lastReconnectTimestamp;
   }
 }
