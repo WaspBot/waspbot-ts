@@ -2,9 +2,10 @@
   "compilerOptions": {
     /* Language and Environment */
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022", "DOM", "ESNext"],
     "module": "CommonJS",
     "moduleResolution": "node",
+    "typeRoots": ["./node_modules/@types", "./src/types"],
     
     /* Bundler mode */
     "resolveJsonModule": true,
