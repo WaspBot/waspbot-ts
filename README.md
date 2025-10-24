@@ -43,7 +43,7 @@ To run an example bot, such as the `simple-binance-bot`:
 
 ```bash
 # Ensure you have a .env file with BINANCE_API_KEY and BINANCE_API_SECRET
-npm run example examples/simple-binance-bot.ts
+npm run example -- examples/simple-binance-bot.ts
 ```
 
 **Note:** Connector examples (e.g., `simple-binance-bot.ts`) require environment variables like `BINANCE_API_KEY` and `BINANCE_API_SECRET` to be set. You can create a `.env` file in the project root or set them directly in your shell.

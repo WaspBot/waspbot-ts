@@ -15,7 +15,8 @@
     "clean": "rimraf dist",
     "start": "node dist/index.js",
     "start:dev": "ts-node src/index.ts",
-    "test": "npx jest"
+    "test": "npx jest",
+    "example": "npx ts-node"
   },
   "keywords": [
     "trading",
