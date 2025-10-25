@@ -5,19 +5,74 @@
 
 import { DateTime } from 'luxon';
 import { EventDispatcher } from './dispatcher.js';
+import { BaseEvent, TimestampedEvent, EventPriority, EventStatus } from './events.js';
 
-// TODO: Implement clock system
+export interface TickEvent extends TimestampedEvent {
+  readonly type: 'CLOCK_TICK';
+  readonly tickNumber: number;
+}
+
 export class Clock {
-  constructor() {
-    // Initialization code here
+  private emissionStarted = false;
+  private emissionTimer?: ReturnType<typeof setInterval>;
+  private tickInterval: number;
+  private tickCount = 0;
+
+  constructor(tickInterval: number = 1000) {
+    this.tickInterval = tickInterval;
   }
 
-  // Method to schedule an event
+  private _createTickEvent(): TickEvent {
+    this.tickCount++;
+    return {
+      id: `tick-${Date.now()}-${this.tickCount}`,
+      type: 'CLOCK_TICK',
+      source: 'Clock',
+      priority: EventPriority.LOW,
+      status: EventStatus.COMPLETED,
+      timestamp: Date.now(),
+      tickNumber: this.tickCount,
+    };
+  }
+
+  public startEmittingEvents(dispatcher: EventDispatcher): void {
+    if (this.emissionStarted) {
+      throw new Error('Event emission already started');
+    }
+
+    if (!dispatcher.isReady()) {
+      throw new Error(`Cannot start emitting events: EventDispatcher '${dispatcher.name}' is not ready. Call markAsReady() first.`);
+    }
+
+    this.emissionStarted = true;
+    this.emissionTimer = setInterval(() => {
+      try {
+        const event = this._createTickEvent();
+        const maybePromise = dispatcher.emitEvent(event);
+        if (maybePromise && typeof (maybePromise as Promise<any>).catch === 'function') {
+          (maybePromise as Promise<any>).catch(err => console.error('Failed to emit tick event:', err));
+        }
+      } catch (err) {
+        console.error('Failed to emit tick event synchronously:', err);
+      }
+    }, this.tickInterval);
+
+    console.log(`Clock started, EventDispatcher '${dispatcher.name}' is ready: ${dispatcher.isReady()}`);
+  }
+
+  public stopEmittingEvents(): void {
+    if (this.emissionTimer) {
+      clearInterval(this.emissionTimer);
+      this.emissionTimer = undefined;
+    }
+    this.emissionStarted = false;
+    console.log('Clock stopped emitting events.');
+  }
+
   scheduleEvent(event: () => void, delay: number): void {
     setTimeout(event, delay);
   }
 
-  // Method to get the current time
   getCurrentTime(timezone?: string): Date {
     if (timezone) {
       const dt = DateTime.now().setZone(timezone);
@@ -27,21 +82,5 @@ export class Clock {
       return dt.toJSDate();
     }
     return new Date();
-  }
-
-  /**
-   * Placeholder method to simulate starting event emission, checking dispatcher readiness.
-   * In a real implementation, this would start a loop or timer to emit events.
-   */
-  public startEmittingEvents(dispatcher: EventDispatcher): void {
-    if (!dispatcher.isReady()) {
-      console.warn(
-        `Clock is attempting to start emitting events, but EventDispatcher '${dispatcher.name}' is not yet ready. Events might be missed.`
-      );
-      // Optionally, throw an error or wait for the dispatcher to be ready
-      // throw new Error("EventDispatcher not ready.");
-    }
-    console.log(`Clock started, EventDispatcher '${dispatcher.name}' is ready: ${dispatcher.isReady()}`);
-    // In a real scenario, start emitting events here, e.g., using setInterval
   }
 }
