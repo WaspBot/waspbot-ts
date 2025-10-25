@@ -1,6 +1,7 @@
 import { OrderManager, OrderPlacementResult } from '../types/orders-management';
-import { CreateOrderRequest, OrderState, validateCreateOrderRequest } from '../types/orders-basic';
+import { CreateOrderRequest, OrderState, validateCreateOrderRequest, InFlightOrder } from '../types/orders-basic';
 import { WaspBotError } from '../types/common';
+import { isOrderInState, filterInFlightOrdersByState } from './orderUtils';
 
 export class SimpleOrderManager implements OrderManager {
   private orders: Map<string, any> = new Map();
@@ -56,4 +57,12 @@ export class SimpleOrderManager implements OrderManager {
   async getPerformanceMetrics() { throw new Error('Not implemented'); }
   async getLostOrders() { throw new Error('Not implemented'); }
   async reconcileOrders(exchangeId: string) { throw new Error('Not implemented'); }
+
+  /**
+   * Get orders in specific state.
+   */
+  getOrdersByState(state: OrderState): InFlightOrder[] {
+    const allOrders = Array.from(this.orders.values());
+    return filterInFlightOrdersByState(allOrders, state);
+  }
 }
