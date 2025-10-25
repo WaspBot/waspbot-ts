@@ -1,9 +1,50 @@
 import { OrderManager, OrderPlacementResult } from '../types/orders-management';
-import { CreateOrderRequest, OrderState, validateCreateOrderRequest } from '../types/orders-basic';
+import { CreateOrderRequest, OrderState, validateCreateOrderRequest, InFlightOrder } from '../types/orders-basic';
 import { WaspBotError } from '../types/common';
+import { isOrderInState, filterInFlightOrdersByState } from './orderUtils';
+
+function createInFlightOrder(req: CreateOrderRequest): InFlightOrder {
+  const state = OrderState.PENDING_CREATE;
+  const creationTimestamp = Date.now();
+
+  // Placeholder for promise-based properties. In a real scenario, these would be managed
+  // by the order manager to resolve/reject when the order state changes.
+  let resolveFill: (v: any) => void;
+  let rejectFill: (e: any) => void;
+  const fillPromise = new Promise<any>((res, rej) => { resolveFill = res; rejectFill = rej; });
+
+  let resolveCancel: (v: any) => void;
+  let rejectCancel: (e: any) => void;
+  const cancelPromise = new Promise<any>((res, rej) => { resolveCancel = res; rejectCancel = rej; });
+
+  const order: InFlightOrder = {
+    id: req.clientOrderId, // Using clientOrderId as the unique ID
+    state,
+    creationTimestamp,
+    lastUpdateTimestamp: creationTimestamp,
+    // Copy request properties
+    ...req,
+    isPendingCreate: state === OrderState.PENDING_CREATE,
+    isOpen: state === OrderState.OPEN,
+    isDone: state === OrderState.DONE,
+    isFilled: state === OrderState.FILLED,
+    isCancelled: state === OrderState.CANCELLED,
+    // Promise-based properties
+    waitForFill: () => fillPromise,
+    waitForCancel: () => cancelPromise,
+    // These resolve/reject functions would be stored and called by the order manager
+    // when the actual order state changes on the exchange.
+    _resolveFill: resolveFill,
+    _rejectFill: rejectFill,
+    _resolveCancel: resolveCancel,
+    _rejectCancel: rejectCancel,
+  } as InFlightOrder;
+
+  return order;
+}
 
 export class SimpleOrderManager implements OrderManager {
-  private orders: Map<string, any> = new Map();
+  private orders: Map<string, InFlightOrder> = new Map();
 
   async placeOrder(request: CreateOrderRequest): Promise<OrderPlacementResult> {
     try {
@@ -23,12 +64,8 @@ export class SimpleOrderManager implements OrderManager {
     }
 
     // Simulate order placement
-    this.orders.set(request.clientOrderId, {
-      ...request,
-      state: OrderState.PENDING_CREATE,
-      creationTimestamp: Date.now(),
-      lastUpdateTimestamp: Date.now(),
-    });
+    const inFlightOrder = createInFlightOrder(request);
+    this.orders.set(request.clientOrderId, inFlightOrder);
     return {
       success: true,
       clientOrderId: request.clientOrderId,
@@ -56,4 +93,12 @@ export class SimpleOrderManager implements OrderManager {
   async getPerformanceMetrics() { throw new Error('Not implemented'); }
   async getLostOrders() { throw new Error('Not implemented'); }
   async reconcileOrders(exchangeId: string) { throw new Error('Not implemented'); }
+
+  /**
+   * Get orders in specific state.
+   */
+  getOrdersByState(state: OrderState): InFlightOrder[] {
+    const allOrders = Array.from(this.orders.values());
+    return filterInFlightOrdersByState(allOrders, state);
+  }
 }

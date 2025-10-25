@@ -244,6 +244,12 @@ export interface InFlightOrder extends Order {
 
   /** Promise that resolves when order is processed by exchange */
   readonly processedByExchangePromise: Promise<void>;
+
+  // Internal properties for managing promises
+  _resolveFill?: (value: any) => void;
+  _rejectFill?: (reason?: any) => void;
+  _resolveCancel?: (value: any) => void;
+  _rejectCancel?: (reason?: any) => void;
 }
 
 // ============================================================================
