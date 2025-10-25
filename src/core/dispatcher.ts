@@ -614,6 +614,7 @@ export class EventDispatcher extends EventEmitter {
   private readonly eventQueue: EventQueue;
   private processing = false;
   private processingLock: Promise<void> | null = null;
+  private _isReady = false;
 
   // Event filtering and routing
   private readonly filteredSubscriptions = new Map<string, FilteredSubscription>();
@@ -636,6 +637,21 @@ export class EventDispatcher extends EventEmitter {
     this.eventQueue = new EventQueue(this.config.batch);
     this.eventStorage = eventStorage || new InMemoryEventStorage();
     this.enablePersistence = enablePersistence;
+  }
+
+  /**
+   * Mark the dispatcher as ready to process events.
+   */
+  public markAsReady(): void {
+    this._isReady = true;
+    super.emit('dispatcherReady', this.name);
+  }
+
+  /**
+   * Check if the dispatcher is ready to process events.
+   */
+  public isReady(): boolean {
+    return this._isReady;
   }
 
   // ============================================================================
@@ -808,6 +824,10 @@ export class EventDispatcher extends EventEmitter {
    * Emit an event to all subscribers (with persistence)
    */
   public async emitEvent(event: BaseEvent): Promise<boolean> {
+    if (!this._isReady) {
+      throw new Error(`EventDispatcher '${this.name}' is not ready to emit events. Call markAsReady() first.`);
+    }
+
     // Persist event if enabled
     if (this.enablePersistence) {
       await this.eventStorage.saveEvent(event);

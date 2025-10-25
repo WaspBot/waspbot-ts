@@ -1,14 +1,13 @@
 {
   "compilerOptions": {
     /* Language and Environment */
-    "target": "ES2022",
-    "lib": ["ES2022", "DOM", "ESNext"],
-    "module": "CommonJS",
-    "moduleResolution": "node",
-    "typeRoots": ["./node_modules/@types", "./src/types"],
-    
-    /* Bundler mode */
-    "resolveJsonModule": true,
+                    "target": "ES2022",
+                    "lib": ["ES2022", "ESNext"],
+                    "module": "CommonJS",
+                    "moduleResolution": "node",
+                    "types": ["node", "jest", "luxon", "ws"],
+                    
+                    /* Bundler mode */    "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": false,
     
