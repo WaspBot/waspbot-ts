@@ -2,9 +2,14 @@
 module.exports = {
   testEnvironment: 'node',
   testMatch: ["**/tests/**/*.test.ts"],
-  transform: {
-    '^.+\.(ts|tsx)$': 'babel-jest',
-  },
+/** @type {import('ts-jest').JestConfigWithTsJest} */
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  testMatch: ["**/tests/**/*.test.ts"],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  rootDir: '.',
+};
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   rootDir: '.',
 };
