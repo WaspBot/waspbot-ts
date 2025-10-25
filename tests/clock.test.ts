@@ -1,5 +1,33 @@
-import { Clock } from '../src/core/clock';
+import { Clock, TickEvent } from '../src/core/clock';
 import { DateTime } from 'luxon';
+import { EventDispatcher } from '../src/core/dispatcher';
+import { BaseEvent } from '../src/core/events';
+
+// Mock EventDispatcher for testing readiness and event emission
+class MockEventDispatcher extends EventDispatcher {
+  private _mockIsReady = false;
+  public emittedEvents: BaseEvent[] = [];
+
+  constructor(name: string = 'MockEventDispatcher') {
+    super(name);
+  }
+
+  public markAsReady(): void {
+    this._mockIsReady = true;
+  }
+
+  public isReady(): boolean {
+    return this._mockIsReady;
+  }
+
+  public async emitEvent(event: BaseEvent): Promise<boolean> {
+    if (!this._mockIsReady) {
+      throw new Error(`EventDispatcher '${this.name}' is not ready to emit events. Call markAsReady() first.`);
+    }
+    this.emittedEvents.push(event);
+    return Promise.resolve(true);
+  }
+}
 
 describe('Clock.getCurrentTime', () => {
   let clock: Clock;
@@ -83,5 +111,119 @@ describe('Clock.getCurrentTime', () => {
     jest.setSystemTime(new Date('2025-11-02T06:00:00Z')); // 1 AM EST (second occurrence)
     fallBackTime = clock.getCurrentTime('America/New_York');
     expect(DateTime.fromJSDate(fallBackTime).toISO({ includeOffset: true, suppressMilliseconds: false })).toBe('2025-11-02T01:00:00.000-05:00');
+  });
+});
+
+describe('Clock event emission', () => {
+  let clock: Clock;
+  let mockDispatcher: MockEventDispatcher;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockDispatcher = new MockEventDispatcher();
+    clock = new Clock(100); // 100ms tick interval
+  });
+
+  afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
+    clock.stopEmittingEvents(); // Ensure clock is stopped after each test
+  });
+
+  test('should throw error if emission already started', () => {
+    mockDispatcher.markAsReady();
+    clock.startEmittingEvents(mockDispatcher);
+    expect(() => clock.startEmittingEvents(mockDispatcher)).toThrow('Event emission already started');
+  });
+
+  test('should throw error if dispatcher is not ready', () => {
+    expect(() => clock.startEmittingEvents(mockDispatcher)).toThrow(
+      `Cannot start emitting events: EventDispatcher '${mockDispatcher.name}' is not ready. Call markAsReady() first.`
+    );
+  });
+
+  test('should start emitting events when dispatcher is ready', () => {
+    mockDispatcher.markAsReady();
+    clock.startEmittingEvents(mockDispatcher);
+    jest.advanceTimersByTime(100);
+    expect(mockDispatcher.emittedEvents.length).toBe(1);
+    expect(mockDispatcher.emittedEvents[0].type).toBe('CLOCK_TICK');
+
+    jest.advanceTimersByTime(100);
+    expect(mockDispatcher.emittedEvents.length).toBe(2);
+  });
+
+  test('should stop emitting events', () => {
+    mockDispatcher.markAsReady();
+    clock.startEmittingEvents(mockDispatcher);
+    jest.advanceTimersByTime(100);
+    expect(mockDispatcher.emittedEvents.length).toBe(1);
+
+    clock.stopEmittingEvents();
+    jest.advanceTimersByTime(100);
+    expect(mockDispatcher.emittedEvents.length).toBe(1); // Should not emit more events
+  });
+
+  test('should not emit events after stop and before restart', () => {
+    mockDispatcher.markAsReady();
+    clock.startEmittingEvents(mockDispatcher);
+    jest.advanceTimersByTime(100);
+    expect(mockDispatcher.emittedEvents.length).toBe(1);
+
+    clock.stopEmittingEvents();
+    jest.advanceTimersByTime(500);
+    expect(mockDispatcher.emittedEvents.length).toBe(1);
+
+    clock.startEmittingEvents(mockDispatcher);
+    jest.advanceTimersByTime(100);
+    expect(mockDispatcher.emittedEvents.length).toBe(2);
+  });
+
+  test('emitted events should be TickEvent type', () => {
+    mockDispatcher.markAsReady();
+    clock.startEmittingEvents(mockDispatcher);
+    jest.advanceTimersByTime(100);
+    const emittedEvent = mockDispatcher.emittedEvents[0] as TickEvent;
+    expect(emittedEvent).toBeDefined();
+    expect(emittedEvent.type).toBe('CLOCK_TICK');
+    expect(emittedEvent.tickNumber).toBe(1);
+    expect(emittedEvent.source).toBe('Clock');
+  });
+
+  test('should log error if emitEvent fails synchronously', () => {
+    mockDispatcher.markAsReady();
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Temporarily override emitEvent to throw synchronously
+    mockDispatcher.emitEvent = jest.fn((event: BaseEvent) => {
+      throw new Error('Sync emit failed');
+    });
+
+    clock.startEmittingEvents(mockDispatcher);
+    jest.advanceTimersByTime(100);
+
+    expect(errorSpy).toHaveBeenCalledWith('Failed to emit tick event synchronously:', expect.any(Error));
+    expect(mockDispatcher.emittedEvents.length).toBe(0); // No events should be added if sync emit fails
+    errorSpy.mockRestore();
+  });
+
+  test('should log error if emitEvent fails asynchronously', async () => {
+    mockDispatcher.markAsReady();
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Temporarily override emitEvent to return a rejected promise
+    mockDispatcher.emitEvent = jest.fn((event: BaseEvent) => {
+      return Promise.reject(new Error('Async emit failed'));
+    });
+
+    clock.startEmittingEvents(mockDispatcher);
+    jest.advanceTimersByTime(100);
+
+    // Advance timers to allow promise to resolve/reject
+    await Promise.resolve(); // Allow microtasks to run
+
+    expect(errorSpy).toHaveBeenCalledWith('Failed to emit tick event:', expect.any(Error));
+    expect(mockDispatcher.emittedEvents.length).toBe(0); // No events should be added if async emit fails
+    errorSpy.mockRestore();
   });
 });

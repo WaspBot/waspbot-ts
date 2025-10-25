@@ -1,12 +1,38 @@
-/**
- * Core type definitions for WaspBot-TS
- *
- * This file exports all the fundamental types and interfaces
- * used throughout the trading bot framework.
- */
+import { v4 as uuid } from 'uuid';
+import { BaseEvent, EventPriority, EventStatus } from '../core/events.js';
+import { Timestamp } from './common.js';
 
 // Export common types and utilities
 export * from './common.js';
+
+export interface TickEvent extends BaseEvent {
+  id: string;
+  type: 'Tick';
+  source?: string;
+  priority: EventPriority;
+  status: EventStatus;
+  timestamp: Timestamp;
+  interval: number;
+}
+
+/**
+ * Metrics for the event queue
+ */
+export interface QueueMetrics {
+  totalProcessed: number;
+  totalFailed: number;
+  averageProcessingTime: number;
+  totalDropped: number;
+}
+
+/**
+ * States for queue processing
+ */
+export enum QueueProcessingState {
+  PAUSED = 'paused',
+  IDLE = 'idle',
+  DRAINING = 'draining',
+}
 
 // Export market data types
 export * from '../market-data/ticker.js';
