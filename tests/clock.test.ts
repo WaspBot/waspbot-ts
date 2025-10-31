@@ -171,18 +171,15 @@ describe('Clock event emission', () => {
     expect(mockDispatcher.emittedEvents.length).toBe(1);
 
     clock.stopEmittingEvents();
-    jest.advanceTimersByTime(500); // Advance time past a few potential ticks
+    jest.advanceTimersByTime(500);
     expect(mockDispatcher.emittedEvents.length).toBe(1); // No new events after stopping
 
-    // Restart the clock
-    clock = new Clock(100); // Re-initialize clock to simulate a fresh start
-    mockDispatcher = new MockEventDispatcher(); // Re-initialize dispatcher
-    mockDispatcher.markAsReady();
+    // Restart the same clock
     clock.startEmittingEvents(mockDispatcher);
     jest.advanceTimersByTime(100);
-    expect(mockDispatcher.emittedEvents.length).toBe(1); // Only one new event after restart
+    expect(mockDispatcher.emittedEvents.length).toBe(2); // One event from initial start, one after restart
     jest.advanceTimersByTime(100);
-    expect(mockDispatcher.emittedEvents.length).toBe(2); // Another event after another tick
+    expect(mockDispatcher.emittedEvents.length).toBe(3); // Another event after another tick
   });
 
 
