@@ -36,6 +36,12 @@ export class Clock {
   }
 
   public startEmittingEvents(dispatcher: EventDispatcher): void {
+    // Clear any existing timer to prevent duplicate emissions if start is called multiple times
+    if (this.emissionTimer) {
+      clearInterval(this.emissionTimer);
+      this.emissionTimer = undefined;
+    }
+
     if (this.emissionStarted) {
       throw new Error('Event emission already started');
     }
