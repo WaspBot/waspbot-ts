@@ -2,7 +2,7 @@
  * Binance connector for WaspBot-TS
  */
 
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import { HttpClient, HttpError, HttpClientConfig } from '../utils/http-client';
 
 import { Logger } from '../core/logger';
 
@@ -26,11 +26,7 @@ const BINANCE_API_BASE_URL = 'https://api.binance.com';
 
 export class BinanceConnector extends BaseConnector {
 
-  private httpClient: AxiosInstance;
-
-  private maxRetries: number;
-
-  private retryDelayMs: number;
+  private httpClient: HttpClient;
 
 
 
@@ -38,7 +34,7 @@ export class BinanceConnector extends BaseConnector {
 
     super(config);
 
-    this.httpClient = axios.create({
+    const httpClientConfig: HttpClientConfig = {
 
       baseURL: BINANCE_API_BASE_URL,
 
@@ -52,11 +48,21 @@ export class BinanceConnector extends BaseConnector {
 
       },
 
-    });
+      retries: (config.exchangeSpecific && config.exchangeSpecific['maxRetries'] as number) || 3,
 
-    this.maxRetries = (config.exchangeSpecific && config.exchangeSpecific['maxRetries'] as number) || 3;
+      retryDelay: (retryCount: number) => {
 
-    this.retryDelayMs = (config.exchangeSpecific && config.exchangeSpecific['retryDelayMs'] as number) || 1000;
+        const delay = ((config.exchangeSpecific && config.exchangeSpecific['retryDelayMs'] as number) || 1000) * Math.pow(2, retryCount - 1);
+
+        Logger.warn(`BinanceConnector: Retrying request in ${delay}ms...`);
+
+        return delay;
+
+      },
+
+    };
+
+    this.httpClient = new HttpClient(httpClientConfig);
 
   }
 
@@ -64,63 +70,29 @@ export class BinanceConnector extends BaseConnector {
 
   private async makeRequest<T>(method: 'get' | 'post', endpoint: string, data?: any): Promise<T> {
 
-    let attempts = 0;
+    try {
 
-    while (attempts <= this.maxRetries) {
+      const response = await (method === 'get' ? this.httpClient.get<T>(endpoint, { params: data }) : this.httpClient.post<T>(endpoint, data));
 
-      try {
+      return response;
 
-        const response = await (method === 'get' ? this.httpClient.get(endpoint, { params: data }) : this.httpClient.post(endpoint, data));
+    } catch (error) {
 
-        return response.data as T;
+      if (error instanceof HttpError) {
 
-      } catch (error) {
+        Logger.error(`BinanceConnector: Request to ${error.url} failed. Status: ${error.status}, Method: ${error.method}, Is Network Error: ${error.isNetworkError}, Message: ${error.message}`);
 
-        if (axios.isAxiosError(error)) {
+        throw error;
 
-          const axiosError = error as AxiosError;
+      } else {
 
-          const status = axiosError.response?.status;
+        Logger.error(`BinanceConnector: An unexpected error occurred for ${endpoint}: ${error}`);
 
-          const isTransient = !status || (status >= 500 && status < 600) || axiosError.code === 'ECONNABORTED' || axiosError.code === 'ENOTFOUND';
-
-
-
-          Logger.error(`BinanceConnector: Request to ${endpoint} failed (Attempt ${attempts + 1}/${this.maxRetries + 1}). Status: ${status}, Code: ${axiosError.code}, Message: ${axiosError.message}`);
-
-
-
-          if (isTransient && attempts < this.maxRetries) {
-
-            attempts++;
-
-            const delay = this.retryDelayMs * Math.pow(2, attempts - 1);
-
-            Logger.warn(`BinanceConnector: Retrying request to ${endpoint} in ${delay}ms...`);
-
-            await new Promise(resolve => setTimeout(resolve, delay));
-
-          } else {
-
-            Logger.error(`BinanceConnector: Max retry attempts reached or non-transient error for ${endpoint}.`);
-
-            throw error; // Re-throw non-transient errors or after max retries
-
-          }
-
-        } else {
-
-          Logger.error(`BinanceConnector: An unexpected error occurred for ${endpoint}: ${error}`);
-
-          throw error;
-
-        }
+        throw error;
 
       }
 
     }
-
-    throw new Error("BinanceConnector: Should not reach here - max retries exceeded.");
 
   }
 
@@ -240,7 +212,11 @@ export class BinanceConnector extends BaseConnector {
 
       return ticker;
     } catch (error) {
-      Logger.error(`BinanceConnector: Failed to get ticker for ${symbol}. Error: ${error}`);
+      if (error instanceof HttpError) {
+        Logger.error(`BinanceConnector: Failed to get ticker for ${symbol}. Status: ${error.status}, Message: ${error.message}`);
+      } else {
+        Logger.error(`BinanceConnector: Failed to get ticker for ${symbol}. Error: ${error}`);
+      }
       throw error; // Re-throw the error
     }
   }
