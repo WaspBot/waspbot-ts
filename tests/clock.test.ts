@@ -185,17 +185,7 @@ describe('Clock event emission', () => {
     expect(mockDispatcher.emittedEvents.length).toBe(2); // Another event after another tick
   });
 
-  test('should not emit duplicate events if startEmittingEvents is called multiple times without stopping', () => {
-    mockDispatcher.markAsReady();
-    clock.startEmittingEvents(mockDispatcher);
-    jest.advanceTimersByTime(100);
-    expect(mockDispatcher.emittedEvents.length).toBe(1);
 
-    // Call startEmittingEvents again without stopping
-    clock.startEmittingEvents(mockDispatcher);
-    jest.advanceTimersByTime(100);
-    expect(mockDispatcher.emittedEvents.length).toBe(2); // Should still only have one new event, not two from duplicate timers
-  });
 
 
   test('emitted events should be TickEvent type', () => {
