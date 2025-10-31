@@ -164,7 +164,7 @@ describe('Clock event emission', () => {
     expect(mockDispatcher.emittedEvents.length).toBe(1); // Should not emit more events
   });
 
-  test('should not emit events after stop and before restart', () => {
+  test('should not emit duplicate events after stop and restart', () => {
     mockDispatcher.markAsReady();
     clock.startEmittingEvents(mockDispatcher);
     jest.advanceTimersByTime(100);
@@ -172,12 +172,18 @@ describe('Clock event emission', () => {
 
     clock.stopEmittingEvents();
     jest.advanceTimersByTime(500);
-    expect(mockDispatcher.emittedEvents.length).toBe(1);
+    expect(mockDispatcher.emittedEvents.length).toBe(1); // No new events after stopping
 
+    // Restart the same clock
     clock.startEmittingEvents(mockDispatcher);
     jest.advanceTimersByTime(100);
-    expect(mockDispatcher.emittedEvents.length).toBe(2);
+    expect(mockDispatcher.emittedEvents.length).toBe(2); // One event from initial start, one after restart
+    jest.advanceTimersByTime(100);
+    expect(mockDispatcher.emittedEvents.length).toBe(3); // Another event after another tick
   });
+
+
+
 
   test('emitted events should be TickEvent type', () => {
     mockDispatcher.markAsReady();

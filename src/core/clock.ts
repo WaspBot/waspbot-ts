@@ -36,8 +36,16 @@ export class Clock {
   }
 
   public startEmittingEvents(dispatcher: EventDispatcher): void {
+    // Behavior: Prevent duplicate starts. Throws an error if event emission is already active.
     if (this.emissionStarted) {
       throw new Error('Event emission already started');
+    }
+
+    // Clear any existing timer to ensure a clean start. This handles cases where
+    // emissionStarted might be false but a timer somehow persists (e.g., after an error).
+    if (this.emissionTimer) {
+      clearInterval(this.emissionTimer);
+      this.emissionTimer = undefined;
     }
 
     if (!dispatcher.isReady()) {
