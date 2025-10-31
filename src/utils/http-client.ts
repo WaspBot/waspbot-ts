@@ -50,13 +50,13 @@ export class HttpClient {
     this.client = axios.create({
       baseURL: config.baseURL,
       headers: config.headers,
-      timeout: config.timeout || 10000, // Default timeout of 10 seconds
+      timeout: config.timeout ?? 10000, // Default timeout of 10 seconds
     });
 
     // Configure axios-retry
     axiosRetry(this.client, {
-      retries: config.retries || 3, // Default to 3 retries
-      retryDelay: config.retryDelay || axiosRetry.exponentialDelay,
+      retries: config.retries ?? 3, // Default to 3 retries
+      retryDelay: config.retryDelay ?? axiosRetry.exponentialDelay,
       retryCondition: (error: AxiosError) => {
         // Retry on network errors or 5xx status codes
         return axiosRetry.isNetworkError(error) || (error.response?.status && error.response.status >= 500);
