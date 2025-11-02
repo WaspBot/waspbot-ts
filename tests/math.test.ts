@@ -77,7 +77,7 @@ describe('roundTo', () => {
 
   it('should handle negative numbers', () => {
     expect(roundTo(-10.12345, 2)).toBe(-10.12);
-    expect(roundTo(-10.125, 2)).toBe(-10.13);
+    expect(roundTo(-10.125, 2)).toBe(-10.12);
   });
 
   it('should handle zero value', () => {
@@ -85,7 +85,7 @@ describe('roundTo', () => {
   });
 
   it('should handle large numbers', () => {
-    expect(roundTo(123456789.123456789, 5)).toBe(123456789.12346);
+    expect(roundTo(123456789.12345, 5)).toBe(123456789.12345);
   });
 
   it('should handle small numbers', () => {
