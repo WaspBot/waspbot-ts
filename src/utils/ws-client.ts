@@ -14,6 +14,7 @@ export class WsClient {
   private isConnected: boolean = false;
   private isReconnecting: boolean = false;
   private reconnectCounter: number = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private lastReconnectTimestamp: Date | null = null;
   private messageListeners: ((message: string) => void)[] = [];
 
@@ -41,6 +42,10 @@ export class WsClient {
       this.isConnected = true;
       this.isReconnecting = false;
       this.reconnectAttempts = 0;
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
     };
 
     this.ws.onmessage = (event: WebSocket.MessageEvent) => {
@@ -61,7 +66,7 @@ export class WsClient {
         this.lastReconnectTimestamp = new Date();
         const delay = this.retryDelayMs * Math.pow(2, this.reconnectAttempts - 1);
         Logger.info(`WsClient: Retrying connection to ${this.url} in ${delay}ms... (Attempt ${this.reconnectAttempts}/${this.maxRetries})`);
-        setTimeout(() => this.connect(), delay);
+        this.reconnectTimer = setTimeout(() => this.connect(), delay);
       } else {
         Logger.error(`WsClient: Max reconnect attempts reached for ${this.url}. Permanent disconnection.`);
         this.isReconnecting = false;
@@ -80,10 +85,20 @@ export class WsClient {
   public close(): void {
     if (this.ws) {
       Logger.info(`WsClient: Closing connection to ${this.url}`);
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
       this.ws.close();
       this.isConnected = false;
       this.isReconnecting = false;
       this.reconnectAttempts = 0; // Reset attempts on explicit close
+      // Remove event listeners to prevent memory leaks
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onerror = null;
+      this.ws.onclose = null;
+      this.ws = null; // Nullify the WebSocket instance
     }
   }
 

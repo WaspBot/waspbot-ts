@@ -192,6 +192,11 @@ describe('WsClient', () => {
     expect(wsClient.getIsReconnecting()).toBe(false);
     expect(Logger.info).toHaveBeenCalledWith(expect.stringContaining(`Closing connection to ${TEST_URL}`));
 
+    // Advance past the pending reconnection timer and verify no reconnection happens
+    const initialCallCount = (WebSocket as jest.Mock).mock.calls.length;
+    jest.advanceTimersByTime(RETRY_DELAY_MS * 10); // Advance well past any pending timer
+    expect(WebSocket).toHaveBeenCalledTimes(initialCallCount); // No new connection attempts
+
     // Try connecting again, should not be in a reconnecting state
     wsClient.connect();
     expect(wsClient.getIsReconnecting()).toBe(false);
