@@ -12,6 +12,7 @@ export class WsClient {
   private retryDelayMs: number;
   private reconnectAttempts: number = 0;
   private isConnected: boolean = false;
+  private isReconnecting: boolean = false;
   private reconnectCounter: number = 0;
   private lastReconnectTimestamp: Date | null = null;
   private messageListeners: ((message: string) => void)[] = [];
@@ -28,12 +29,17 @@ export class WsClient {
       return;
     }
 
+    if (this.reconnectAttempts > 0) {
+      this.isReconnecting = true;
+    }
+
     Logger.info(`WsClient: Attempting to connect to ${this.url} (Attempt ${this.reconnectAttempts + 1}/${this.maxRetries + 1})`);
     this.ws = new WebSocket(this.url);
 
     this.ws.onopen = () => {
       Logger.info(`WsClient: Connected to ${this.url}`);
       this.isConnected = true;
+      this.isReconnecting = false;
       this.reconnectAttempts = 0;
     };
 
@@ -58,6 +64,7 @@ export class WsClient {
         setTimeout(() => this.connect(), delay);
       } else {
         Logger.error(`WsClient: Max reconnect attempts reached for ${this.url}. Permanent disconnection.`);
+        this.isReconnecting = false;
       }
     };
   }
@@ -75,16 +82,27 @@ export class WsClient {
       Logger.info(`WsClient: Closing connection to ${this.url}`);
       this.ws.close();
       this.isConnected = false;
+      this.isReconnecting = false;
       this.reconnectAttempts = 0; // Reset attempts on explicit close
     }
   }
 
   public onMessage(listener: (message: string) => void): void {
-    this.messageListeners.push(listener);
+    if (!this.messageListeners.includes(listener)) {
+      this.messageListeners.push(listener);
+    }
+  }
+
+  public removeMessageListener(listener: (message: string) => void): void {
+    this.messageListeners = this.messageListeners.filter(l => l !== listener);
   }
 
   public getIsConnected(): boolean {
     return this.isConnected;
+  }
+
+  public getIsReconnecting(): boolean {
+    return this.isReconnecting;
   }
 
   public getReconnectCounter(): number {
