@@ -8,11 +8,11 @@ class InFlightOrderImpl implements InFlightOrder {
   state: OrderState;
   creationTimestamp: number;
   lastUpdateTimestamp: number;
-  isPendingCreate: boolean;
-  isOpen: boolean;
-  isDone: boolean;
-  isFilled: boolean;
-  isCancelled: boolean;
+  isPendingCreate!: boolean;
+  isOpen!: boolean;
+  isDone!: boolean;
+  isFilled!: boolean;
+  isCancelled!: boolean;
 
   // Properties from CreateOrderRequest
   exchangeId: ExchangeId;
@@ -65,7 +65,12 @@ class InFlightOrderImpl implements InFlightOrder {
   private updateStateFlags() {
     this.isPendingCreate = this.state === OrderState.PENDING_CREATE;
     this.isOpen = this.state === OrderState.OPEN;
-    this.isDone = this.state === OrderState.DONE;
+    this.isDone = [
+      OrderState.DONE,
+      OrderState.FILLED,
+      OrderState.CANCELLED,
+      OrderState.FAILED,
+    ].includes(this.state);
     this.isFilled = this.state === OrderState.FILLED;
     this.isCancelled = this.state === OrderState.CANCELLED;
   }

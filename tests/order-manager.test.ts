@@ -104,4 +104,36 @@ describe('SimpleOrderManager', () => {
       expect(failedOrder.length).toBe(0); // Should not be in tracked orders
     });
   });
+
+  describe('InFlightOrderImpl terminal states', () => {
+    it('should set isDone to true for DONE state', async () => {
+      const inFlightOrder = (orderManager as any).createInFlightOrder(mockCreateOrderRequest);
+      inFlightOrder.updateState(OrderState.DONE);
+      expect(inFlightOrder.isDone).toBe(true);
+    });
+
+    it('should set isDone to true for FILLED state', async () => {
+      const inFlightOrder = (orderManager as any).createInFlightOrder(mockCreateOrderRequest);
+      inFlightOrder.updateState(OrderState.FILLED);
+      expect(inFlightOrder.isDone).toBe(true);
+    });
+
+    it('should set isDone to true for CANCELLED state', async () => {
+      const inFlightOrder = (orderManager as any).createInFlightOrder(mockCreateOrderRequest);
+      inFlightOrder.updateState(OrderState.CANCELLED);
+      expect(inFlightOrder.isDone).toBe(true);
+    });
+
+    it('should set isDone to true for FAILED state', async () => {
+      const inFlightOrder = (orderManager as any).createInFlightOrder(mockCreateOrderRequest);
+      inFlightOrder.updateState(OrderState.FAILED);
+      expect(inFlightOrder.isDone).toBe(true);
+    });
+
+    it('should set isDone to false for OPEN state', async () => {
+      const inFlightOrder = (orderManager as any).createInFlightOrder(mockCreateOrderRequest);
+      inFlightOrder.updateState(OrderState.OPEN);
+      expect(inFlightOrder.isDone).toBe(false);
+    });
+  });
 });
