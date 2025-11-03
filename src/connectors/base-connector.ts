@@ -9,11 +9,11 @@
 import { EventEmitter } from 'events';
 import { HealthStatus,
   ValidationResult,
-} from '../types/common.js';
-import { Ticker, Trade, TradingPairInfo } from '../market-data/ticker.js';
-import { OrderBook } from '../market-data/order-book.js';
-import { Order } from '../order-management/order.js';
-import { clamp } from '../utils/math.js';
+} from '../types/common';
+import { Ticker, Trade, TradingPairInfo } from '../market-data/ticker';
+import { OrderBook } from '../market-data/order-book';
+import { Order } from '../order-management/order';
+import { clamp } from '../utils/math';
 
 /**
  * Configuration interface for connector initialization

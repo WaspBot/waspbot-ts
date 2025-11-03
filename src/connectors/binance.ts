@@ -11,7 +11,7 @@ import { BaseConnector, ConnectorConfig, AccountBalance, TradingFees, OrderReque
 /**
  * Implements a Token Bucket rate limiting algorithm.
  */
-class TokenBucket {
+export class TokenBucket {
   private capacity: number;
   private tokens: number;
   private fillRate: number; // tokens per interval
