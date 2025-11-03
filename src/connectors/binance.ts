@@ -6,7 +6,59 @@ import { HttpClient, HttpError, HttpClientConfig } from '../utils/http-client';
 
 import { Logger } from '../core/logger';
 
-import { BaseConnector, ConnectorConfig, AccountBalance, TradingFees, OrderRequest } from './base-connector';
+import { BaseConnector, ConnectorConfig, AccountBalance, TradingFees, OrderRequest, RateLimiterConfig } from './base-connector';
+
+/**
+ * Implements a Token Bucket rate limiting algorithm.
+ */
+class TokenBucket {
+  private capacity: number;
+  private tokens: number;
+  private fillRate: number; // tokens per interval
+  private interval: number; // milliseconds
+  private lastRefillTime: number;
+
+  constructor(config: RateLimiterConfig) {
+    this.capacity = config.capacity;
+    this.tokens = config.capacity; // Start with a full bucket
+    this.fillRate = config.fillRate;
+    this.interval = config.interval;
+    this.lastRefillTime = Date.now();
+  }
+
+  /**
+   * Attempts to acquire a token. If no tokens are available, it waits until one is.
+   */
+  public async acquire(): Promise<void> {
+    this.refill();
+
+    if (this.tokens > 0) {
+      this.tokens--;
+      return Promise.resolve();
+    } else {
+      const timeToNextToken = this.interval / this.fillRate;
+      const timeSinceLastRefill = Date.now() - this.lastRefillTime;
+      const timeToWait = timeToNextToken - (timeSinceLastRefill % timeToNextToken);
+
+      return new Promise(resolve => {
+        setTimeout(() => {
+          this.tokens--; // Acquire token after waiting
+          resolve();
+        }, timeToWait);
+      });
+    }
+  }
+
+  private refill(): void {
+    const now = Date.now();
+    const timePassed = now - this.lastRefillTime;
+    if (timePassed > 0) {
+      const tokensToAdd = Math.floor(timePassed / this.interval) * this.fillRate;
+      this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
+      this.lastRefillTime = now - (timePassed % this.interval); // Adjust last refill time to be precise
+    }
+  }
+}
 
 import { ExchangeId, TradingPair, OrderId } from '../types/common';
 
@@ -25,75 +77,51 @@ const BINANCE_API_BASE_URL = 'https://api.binance.com';
 
 
 export class BinanceConnector extends BaseConnector {
-
   private httpClient: HttpClient;
-
-
+  private rateLimiter: TokenBucket;
 
   constructor(config: ConnectorConfig) {
-
     super(config);
 
-    const httpClientConfig: HttpClientConfig = {
-
-      baseURL: BINANCE_API_BASE_URL,
-
-      timeout: config.timeout || 5000, // 5 seconds timeout or from config
-
-      headers: {
-
-        'Content-Type': 'application/json',
-
-        // Add API-KEY and signature for authenticated endpoints if needed
-
-      },
-
-      retries: (config.exchangeSpecific && config.exchangeSpecific['maxRetries'] as number) || 3,
-
-      retryDelay: (retryCount: number) => {
-
-        const delay = ((config.exchangeSpecific && config.exchangeSpecific['retryDelayMs'] as number) || 1000) * Math.pow(2, retryCount - 1);
-
-        Logger.warn(`BinanceConnector: Retrying request in ${delay}ms...`);
-
-        return delay;
-
-      },
-
+    // Initialize rate limiter with configurable defaults
+    const rateLimiterConfig: RateLimiterConfig = {
+      capacity: config.rateLimiter?.capacity || 20, // 1200 requests per minute / 60 seconds = 20 requests per second
+      fillRate: config.rateLimiter?.fillRate || 20,
+      interval: config.rateLimiter?.interval || 1000, // 1 second
     };
+    this.rateLimiter = new TokenBucket(rateLimiterConfig);
 
+    const httpClientConfig: HttpClientConfig = {
+      baseURL: BINANCE_API_BASE_URL,
+      timeout: config.timeout || 5000, // 5 seconds timeout or from config
+      headers: {
+        'Content-Type': 'application/json',
+        // Add API-KEY and signature for authenticated endpoints if needed
+      },
+      retries: (config.exchangeSpecific && config.exchangeSpecific['maxRetries'] as number) || 3,
+      retryDelay: (retryCount: number) => {
+        const delay = ((config.exchangeSpecific && config.exchangeSpecific['retryDelayMs'] as number) || 1000) * Math.pow(2, retryCount - 1);
+        Logger.warn(`BinanceConnector: Retrying request in ${delay}ms...`);
+        return delay;
+      },
+    };
     this.httpClient = new HttpClient(httpClientConfig);
-
   }
 
-
-
   private async makeRequest<T>(method: 'get' | 'post', endpoint: string, data?: any): Promise<T> {
-
+    await this.rateLimiter.acquire(); // Acquire a token before making the request
     try {
-
       const response = await (method === 'get' ? this.httpClient.get<T>(endpoint, { params: data }) : this.httpClient.post<T>(endpoint, data));
-
       return response;
-
     } catch (error) {
-
       if (error instanceof HttpError) {
-
         Logger.error(`BinanceConnector: Request to ${error.url} failed. Status: ${error.status}, Method: ${error.method}, Is Network Error: ${error.isNetworkError}, Message: ${error.message}`);
-
         throw error;
-
       } else {
-
         Logger.error(`BinanceConnector: An unexpected error occurred for ${endpoint}: ${error}`);
-
         throw error;
-
       }
-
     }
-
   }
 
 
