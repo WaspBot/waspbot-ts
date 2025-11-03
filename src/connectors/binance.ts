@@ -48,10 +48,11 @@ class TokenBucket {
 
   private scheduleRefill(): void {
     if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
+      return;
     }
     const timeToNextToken = this.interval / this.fillRate;
     this.timeoutId = setTimeout(() => {
+      this.timeoutId = null;
       this.refill();
       while (this.queue.length > 0 && this.tokens >= this.queue[0].weight) {
         const { resolve, weight } = this.queue.shift()!;
@@ -60,8 +61,6 @@ class TokenBucket {
       }
       if (this.queue.length > 0) {
         this.scheduleRefill();
-      } else {
-        this.timeoutId = null;
       }
     }, timeToNextToken);
   }
@@ -208,7 +207,7 @@ export class BinanceConnector extends BaseConnector {
 
   public async getTicker(symbol: TradingPair): Promise<Ticker> {
     try {
-      const response = await this.makeRequest<any>('get', '/api/v3/ticker/24hr', { symbol }, 1);
+      const response = await this.makeRequest<any>('get', '/api/v3/ticker/24hr', { symbol }, 2);
 
       if (!response || typeof response !== 'object') {
         Logger.error(`BinanceConnector: Invalid response structure for ${symbol}. Response: ${JSON.stringify(response)}`);
@@ -447,7 +446,7 @@ export class BinanceConnector extends BaseConnector {
 
     public async getExchangeInfo(): Promise<any> {
 
-      return this.makeRequest('get', '/api/v3/exchangeInfo', undefined, 1);
+      return this.makeRequest('get', '/api/v3/exchangeInfo', undefined, 20);
 
     }
 
@@ -457,7 +456,7 @@ export class BinanceConnector extends BaseConnector {
 
     public async getTickerPrice(symbol: string): Promise<any> {
 
-      return this.makeRequest('get', '/api/v3/ticker/price', { symbol }, 1);
+      return this.makeRequest('get', '/api/v3/ticker/price', { symbol }, 2);
 
     }
 
