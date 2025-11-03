@@ -17,6 +17,8 @@ class TokenBucket {
   private fillRate: number; // tokens per interval
   private interval: number; // milliseconds
   private lastRefillTime: number;
+  private queue: Array<{ resolve: () => void; weight: number }> = [];
+  private timeoutId: NodeJS.Timeout | null = null;
 
   constructor(config: RateLimiterConfig) {
     this.capacity = config.capacity;
@@ -26,36 +28,51 @@ class TokenBucket {
     this.lastRefillTime = Date.now();
   }
 
-  /**
-   * Attempts to acquire a token. If no tokens are available, it waits until one is.
-   */
   public async acquire(): Promise<void> {
+    return this.consume(1);
+  }
+
+  public async consume(weight: number): Promise<void> {
     this.refill();
 
-    if (this.tokens > 0) {
-      this.tokens--;
+    if (this.tokens >= weight) {
+      this.tokens -= weight;
       return Promise.resolve();
     } else {
-      const timeToNextToken = this.interval / this.fillRate;
-      const timeSinceLastRefill = Date.now() - this.lastRefillTime;
-      const timeToWait = timeToNextToken - (timeSinceLastRefill % timeToNextToken);
-
-      return new Promise(resolve => {
-        setTimeout(() => {
-          this.tokens--; // Acquire token after waiting
-          resolve();
-        }, timeToWait);
+      return new Promise<void>(resolve => {
+        this.queue.push({ resolve, weight });
+        this.scheduleRefill();
       });
     }
+  }
+
+  private scheduleRefill(): void {
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+    }
+    const timeToNextToken = this.interval / this.fillRate;
+    this.timeoutId = setTimeout(() => {
+      this.refill();
+      while (this.queue.length > 0 && this.tokens >= this.queue[0].weight) {
+        const { resolve, weight } = this.queue.shift()!;
+        this.tokens -= weight;
+        resolve();
+      }
+      if (this.queue.length > 0) {
+        this.scheduleRefill();
+      } else {
+        this.timeoutId = null;
+      }
+    }, timeToNextToken);
   }
 
   private refill(): void {
     const now = Date.now();
     const timePassed = now - this.lastRefillTime;
     if (timePassed > 0) {
-      const tokensToAdd = Math.floor(timePassed / this.interval) * this.fillRate;
+      const tokensToAdd = (timePassed / this.interval) * this.fillRate;
       this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
-      this.lastRefillTime = now - (timePassed % this.interval); // Adjust last refill time to be precise
+      this.lastRefillTime = now;
     }
   }
 }
@@ -108,8 +125,9 @@ export class BinanceConnector extends BaseConnector {
     this.httpClient = new HttpClient(httpClientConfig);
   }
 
-  private async makeRequest<T>(method: 'get' | 'post', endpoint: string, data?: any): Promise<T> {
-    await this.rateLimiter.acquire(); // Acquire a token before making the request
+  private async makeRequest<T>(method: 'get' | 'post', endpoint: string, data?: any, weight: number = 1): Promise<T> {
+    // TODO: Implement dynamic weight mapping based on Binance's exchangeInfo
+    await this.rateLimiter.consume(weight); // Consume tokens based on request weight
     try {
       const response = await (method === 'get' ? this.httpClient.get<T>(endpoint, { params: data }) : this.httpClient.post<T>(endpoint, data));
       return response;
@@ -190,7 +208,7 @@ export class BinanceConnector extends BaseConnector {
 
   public async getTicker(symbol: TradingPair): Promise<Ticker> {
     try {
-      const response = await this.makeRequest<any>('get', '/api/v3/ticker/24hr', { symbol });
+      const response = await this.makeRequest<any>('get', '/api/v3/ticker/24hr', { symbol }, 1);
 
       if (!response || typeof response !== 'object') {
         Logger.error(`BinanceConnector: Invalid response structure for ${symbol}. Response: ${JSON.stringify(response)}`);
@@ -427,20 +445,20 @@ export class BinanceConnector extends BaseConnector {
 
   // Example public endpoint method
 
-  public async getExchangeInfo(): Promise<any> {
+    public async getExchangeInfo(): Promise<any> {
 
-    return this.makeRequest('get', '/api/v3/exchangeInfo');
+      return this.makeRequest('get', '/api/v3/exchangeInfo', undefined, 1);
 
-  }
+    }
 
 
 
   // Example public endpoint method
 
-  public async getTickerPrice(symbol: string): Promise<any> {
+    public async getTickerPrice(symbol: string): Promise<any> {
 
-    return this.makeRequest('get', '/api/v3/ticker/price', { symbol });
+      return this.makeRequest('get', '/api/v3/ticker/price', { symbol }, 1);
 
-  }
+    }
 
 }
