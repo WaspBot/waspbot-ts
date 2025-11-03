@@ -9,11 +9,23 @@
 import { EventEmitter } from 'events';
 import { HealthStatus,
   ValidationResult,
-} from '../types/common.js';
-import { Ticker, Trade, TradingPairInfo } from '../market-data/ticker.js';
-import { OrderBook } from '../market-data/order-book.js';
-import { Order } from '../order-management/order.js';
-import { clamp } from '../utils/math.js';
+} from '../types/common';
+import { Ticker, Trade, TradingPairInfo } from '../market-data/ticker';
+import { OrderBook } from '../market-data/order-book';
+import { Order } from '../order-management/order';
+import { clamp } from '../utils/math';
+
+/**
+ * Configuration interface for connector initialization
+ */
+export interface RateLimiterConfig {
+  /** The maximum number of tokens the bucket can hold. */
+  capacity: number;
+  /** The number of tokens added to the bucket per interval. */
+  fillRate: number;
+  /** The time interval in milliseconds for adding tokens. */
+  interval: number;
+}
 
 /**
  * Configuration interface for connector initialization
@@ -29,13 +41,16 @@ export interface ConnectorConfig {
   
   /** Connection settings */
   testnet?: boolean;
-  rateLimit?: number;
+  rateLimit?: number; // This can be a general rate limit, but we'll use the token bucket for more fine-grained control
   timeout?: number;
   
   /** Market data subscriptions */
   enableOrderBookUpdates?: boolean;
   enableTradeUpdates?: boolean;
   enableTickerUpdates?: boolean;
+  
+  /** Rate limiter configuration */
+  rateLimiter?: RateLimiterConfig;
   
   /** Additional exchange-specific config */
   exchangeSpecific?: Record<string, unknown>;
