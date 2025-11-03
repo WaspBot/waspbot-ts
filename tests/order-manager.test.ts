@@ -10,13 +10,12 @@ describe('SimpleOrderManager', () => {
   });
 
   const mockCreateOrderRequest: CreateOrderRequest = {
-    exchangeId: ExchangeId.BINANCE,
-    tradingPair: TradingPair.BTC_USDT,
+    tradingPair: 'BTC_USDT',
     clientOrderId: 'test-order-123',
     side: TradingSide.BUY,
     orderType: OrderType.LIMIT,
     price: 50000,
-    quantity: 0.001,
+    amount: 0.001,
   };
 
   describe('placeOrder', () => {
