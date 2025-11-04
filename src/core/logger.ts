@@ -19,35 +19,39 @@ export class Logger {
     Logger.enableColor = enable;
   }
 
+  private static enableJsonOutput: boolean = false;
+
+  static setJsonOutput(enable: boolean): void {
+    Logger.enableJsonOutput = enable;
+  }
+
+  private static _log(level: string, message: string, color: string, outputFn: (...args: any[]) => void): void {
+    const timestamp = new Date().toISOString();
+    if (Logger.enableJsonOutput) {
+      outputFn(JSON.stringify({ timestamp, level, message }));
+    } else {
+      const coloredLevel = Logger.enableColor ? `${color}[${level}]${Logger.colors.reset}` : `[${level}]`;
+      outputFn(`${coloredLevel} ${timestamp}: ${message}`);
+    }
+  }
+
   static log(message: string): void {
-    const timestamp = new Date().toISOString();
-    const level = "[LOG]";
-    const coloredLevel = Logger.enableColor ? `${Logger.colors.cyan}${level}${Logger.colors.reset}` : level;
-    console.log(`${coloredLevel} ${timestamp}: ${message}`);
+    Logger._log("LOG", message, Logger.colors.cyan, console.log);
   }
-  
+
   static error(message: string): void {
-    const timestamp = new Date().toISOString();
-    const level = "[ERROR]";
-    const coloredLevel = Logger.enableColor ? `${Logger.colors.red}${level}${Logger.colors.reset}` : level;
-    console.error(`${coloredLevel} ${timestamp}: ${message}`);
+    Logger._log("ERROR", message, Logger.colors.red, console.error);
   }
+
   static warn(message: string): void {
-    const timestamp = new Date().toISOString();
-    const level = "[WARN]";
-    const coloredLevel = Logger.enableColor ? `${Logger.colors.yellow}${level}${Logger.colors.reset}` : level;
-    console.warn(`${coloredLevel} ${timestamp}: ${message}`);
+    Logger._log("WARN", message, Logger.colors.yellow, console.warn);
   }
+
   static info(message: string): void {
-    const timestamp = new Date().toISOString();
-    const level = "[INFO]";
-    const coloredLevel = Logger.enableColor ? `${Logger.colors.blue}${level}${Logger.colors.reset}` : level;
-    console.info(`${coloredLevel} ${timestamp}: ${message}`);
+    Logger._log("INFO", message, Logger.colors.blue, console.info);
   }
+
   static debug(message: string): void {
-    const timestamp = new Date().toISOString();
-    const level = "[DEBUG]";
-    const coloredLevel = Logger.enableColor ? `${Logger.colors.green}${level}${Logger.colors.reset}` : level;
-    console.debug(`${coloredLevel} ${timestamp}: ${message}`);
+    Logger._log("DEBUG", message, Logger.colors.green, console.debug);
   }
 }
