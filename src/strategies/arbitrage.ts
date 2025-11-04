@@ -251,6 +251,43 @@ export class ArbitrageStrategy extends EventEmitter {
       throw new StrategyError('Cross-exchange arbitrage requires at least 2 exchanges', this.config.strategyId);
     }
 
+    if (this.config.maxPositionSize.lte(0)) {
+      throw new StrategyError('Maximum position size must be positive', this.config.strategyId);
+    }
+
+    if (this.config.maxCapitalPerCycle.lte(0)) {
+      throw new StrategyError('Maximum capital per cycle must be positive', this.config.strategyId);
+    }
+
+    if (this.config.slippageTolerance.lt(0) || this.config.slippageTolerance.gte(1)) {
+      throw new StrategyError('Slippage tolerance must be between 0 and 1 (exclusive)', this.config.strategyId);
+    }
+
+    if (this.config.maxExecutionLatency <= 0) {
+      throw new StrategyError('Maximum execution latency must be positive', this.config.strategyId);
+    }
+
+    if (this.config.opportunityCooldown < 0) {
+      throw new StrategyError('Opportunity cooldown cannot be negative', this.config.strategyId);
+    }
+
+    if (this.config.includeFees && this.config.fees.size === 0) {
+      throw new StrategyError('Fees must be configured if includeFees is true', this.config.strategyId);
+    }
+
+    // Risk management checks
+    if (this.config.riskManagement.maxDailyLoss.lte(0)) {
+      throw new StrategyError('Maximum daily loss must be positive', this.config.strategyId);
+    }
+
+    if (this.config.riskManagement.maxOpenPositions <= 0) {
+      throw new StrategyError('Maximum open positions must be positive', this.config.strategyId);
+    }
+
+    if (this.config.riskManagement.stopLossPercent.lt(0) || this.config.riskManagement.stopLossPercent.gte(1)) {
+      throw new StrategyError('Stop loss percent must be between 0 and 1 (exclusive)', this.config.strategyId);
+    }
+
     for (const exchangeId of this.config.exchanges) {
       if (!this.connectors.has(exchangeId)) {
         throw new StrategyError(`Connector not found for exchange: ${exchangeId}`, this.config.strategyId);
