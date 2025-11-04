@@ -5,6 +5,9 @@ import { Timestamp } from './common.js';
 // Export common types and utilities
 export * from './common.js';
 
+/**
+ * Represents a recurring tick event, signaling a time interval.
+ */
 export interface TickEvent extends BaseEvent {
   id: string;
   type: 'Tick';
