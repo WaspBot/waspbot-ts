@@ -5,19 +5,49 @@
 import { Decimal } from 'decimal.js';
 
 // Core primitives
-export type Timestamp = number; // Unix timestamp in milliseconds
+/**
+ * Unix timestamp in milliseconds.
+ */
+export type Timestamp = number;
+/**
+ * Unique identifier for an exchange.
+ */
 export type ExchangeId = string;
-export type TradingPair = string; // Format: "BTC-USDT"
+/**
+ * Trading pair in "BASE-QUOTE" format (e.g., "BTC-USDT").
+ */
+export type TradingPair = string;
+/**
+ * Unique identifier for an order.
+ */
 export type OrderId = string;
+/**
+ * Unique identifier for a trade.
+ */
 export type TradeId = string;
+/**
+ * Unique identifier for a strategy.
+ */
 export type StrategyId = string;
 
 // Financial primitives using Decimal for precision
+/**
+ * Represents a price, using Decimal for precision.
+ */
 export type Price = Decimal;
+/**
+ * Represents a quantity, using Decimal for precision.
+ */
 export type Quantity = Decimal;
+/**
+ * Represents a monetary amount, using Decimal for precision.
+ */
 export type DecimalAmount = Decimal;
 
 // Event types
+/**
+ * Defines the various types of events that can occur within the system.
+ */
 export type EventType =
   | 'ticker'
   | 'order_book'
@@ -35,12 +65,17 @@ export type EventType =
   | 'info';
 
 // Trading sides
+/**
+ * Defines the side of a trade (BUY or SELL).
+ */
 export enum TradingSide {
   BUY = 'BUY',
   SELL = 'SELL',
 }
 
-// Order types
+/**
+ * Defines the types of orders that can be placed.
+ */
 export enum OrderType {
   LIMIT = 'LIMIT',
   MARKET = 'MARKET',
@@ -51,7 +86,9 @@ export enum OrderType {
   TAKE_PROFIT_LIMIT = 'TAKE_PROFIT_LIMIT',
 }
 
-// Order status
+/**
+ * Defines the possible statuses of an order.
+ */
 export enum OrderStatus {
   NEW = 'NEW',
   PARTIALLY_FILLED = 'PARTIALLY_FILLED',
@@ -62,14 +99,18 @@ export enum OrderStatus {
   PENDING_CANCEL = 'PENDING_CANCEL',
 }
 
-// Time in force
+/**
+ * Defines the time in force options for an order.
+ */
 export enum TimeInForce {
   GTC = 'GTC', // Good Till Canceled
   IOC = 'IOC', // Immediate Or Cancel
   FOK = 'FOK', // Fill Or Kill
 }
 
-// Connector status
+/**
+ * Defines the possible statuses of a connector.
+ */
 export enum ConnectorStatus {
   CONNECTING = 'CONNECTING',
   CONNECTED = 'CONNECTED',
@@ -78,7 +119,9 @@ export enum ConnectorStatus {
   ERROR = 'ERROR',
 }
 
-// Strategy status
+/**
+ * Defines the possible statuses of a strategy.
+ */
 export enum StrategyStatus {
   STOPPED = 'STOPPED',
   STARTING = 'STARTING',
@@ -87,7 +130,9 @@ export enum StrategyStatus {
   ERROR = 'ERROR',
 }
 
-// Log levels
+/**
+ * Defines the logging levels.
+ */
 export enum LogLevel {
   ERROR = 'ERROR',
   WARN = 'WARN',
@@ -97,6 +142,9 @@ export enum LogLevel {
 }
 
 // Base error class
+/**
+ * Base error class for all WaspBot-related errors.
+ */
 export class WaspBotError extends Error {
   public readonly code?: string;
   public readonly context?: Record<string, unknown>;
@@ -109,7 +157,9 @@ export class WaspBotError extends Error {
   }
 }
 
-// Specific error types
+/**
+ * Error specifically for connector-related issues.
+ */
 export class ConnectorError extends WaspBotError {
   constructor(message: string, exchangeId: string, context?: Record<string, unknown>) {
     super(message, 'CONNECTOR_ERROR', { exchangeId, ...context });
@@ -117,6 +167,9 @@ export class ConnectorError extends WaspBotError {
   }
 }
 
+/**
+ * Error specifically for strategy-related issues.
+ */
 export class StrategyError extends WaspBotError {
   constructor(message: string, strategyId: string, context?: Record<string, unknown>) {
     super(message, 'STRATEGY_ERROR', { strategyId, ...context });
@@ -124,6 +177,9 @@ export class StrategyError extends WaspBotError {
   }
 }
 
+/**
+ * Error specifically for order-related issues.
+ */
 export class OrderError extends WaspBotError {
   constructor(message: string, orderId?: string, context?: Record<string, unknown>) {
     super(message, 'ORDER_ERROR', { orderId, ...context });
@@ -132,13 +188,25 @@ export class OrderError extends WaspBotError {
 }
 
 // Utility types
+/**
+ * Makes specified keys in an interface optional.
+ */
 export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+/**
+ * Makes specified keys in an interface required.
+ */
 export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>;
+/**
+ * Makes all properties in an object and its sub-objects optional.
+ */
 export type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
 // Configuration validation result
+/**
+ * Represents the result of a configuration or data validation process.
+ */
 export interface ValidationResult {
   isValid: boolean;
   errors: string[];
@@ -146,11 +214,23 @@ export interface ValidationResult {
 }
 
 // Generic callback types
+/**
+ * Generic callback function for events.
+ */
 export type EventCallback<T = any> = (data: T) => void;
+/**
+ * Generic asynchronous callback function for events.
+ */
 export type AsyncEventCallback<T = any> = (data: T) => Promise<void>;
+/**
+ * Callback function for error handling.
+ */
 export type ErrorCallback = (error: Error) => void;
 
 // Health check result
+/**
+ * Represents the health status of a component or the system.
+ */
 export interface HealthStatus {
   isHealthy: boolean;
   component: string;
@@ -160,6 +240,9 @@ export interface HealthStatus {
 }
 
 // Performance metrics
+/**
+ * Represents performance metrics for a component or the system.
+ */
 export interface PerformanceMetrics {
   timestamp: Timestamp;
   cpu: number;
