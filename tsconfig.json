@@ -6,6 +6,7 @@
                     "module": "CommonJS",
                     "moduleResolution": "node",
                     "typeRoots": ["./node_modules/@types", "./src/types"],
+                    "types": ["node"],
                     
                     /* Bundler mode */    "resolveJsonModule": true,
     "isolatedModules": true,
@@ -42,7 +43,6 @@
     /* Additional Checks */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
     

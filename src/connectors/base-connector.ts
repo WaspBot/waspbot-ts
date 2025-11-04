@@ -1,15 +1,13 @@
 /**
  * Base connector interface for WaspBot-TS
- * 
+ *
  * This abstract class defines the core interface that all exchange connectors
  * must implement. It provides standardized methods for trading operations,
  * market data subscriptions, and account management across different exchanges.
  */
 
 import { EventEmitter } from 'events';
-import { HealthStatus,
-  ValidationResult,
-} from '../types/common';
+import { HealthStatus, ValidationResult } from '../types/common';
 import { Ticker, Trade, TradingPairInfo } from '../market-data/ticker';
 import { OrderBook } from '../market-data/order-book';
 import { Order } from '../order-management/order';
@@ -33,25 +31,25 @@ export interface RateLimiterConfig {
 export interface ConnectorConfig {
   /** Exchange identifier */
   exchangeId: ExchangeId;
-  
+
   /** API credentials */
   apiKey?: string;
   apiSecret?: string;
   passphrase?: string;
-  
+
   /** Connection settings */
   testnet?: boolean;
   rateLimit?: number; // This can be a general rate limit, but we'll use the token bucket for more fine-grained control
   timeout?: number;
-  
+
   /** Market data subscriptions */
   enableOrderBookUpdates?: boolean;
   enableTradeUpdates?: boolean;
   enableTickerUpdates?: boolean;
-  
+
   /** Rate limiter configuration */
   rateLimiter?: RateLimiterConfig;
-  
+
   /** Additional exchange-specific config */
   exchangeSpecific?: Record<string, unknown>;
 }
@@ -340,9 +338,10 @@ export abstract class BaseConnector extends EventEmitter {
     return {
       isHealthy: this.status === ConnectorStatus.CONNECTED,
       component: `${this.exchangeId}-connector`,
-      message: this.status === ConnectorStatus.CONNECTED 
-        ? 'Connector is healthy' 
-        : `Connector status: ${this.status}`,
+      message:
+        this.status === ConnectorStatus.CONNECTED
+          ? 'Connector is healthy'
+          : `Connector status: ${this.status}`,
       lastChecked: Date.now(),
       details: {
         status: this.status,
@@ -421,10 +420,7 @@ export abstract class BaseConnector extends EventEmitter {
         this.emit('disconnected', { exchangeId: this.exchangeId, reason });
         break;
       case ConnectorStatus.ERROR:
-        this.emit('error', new ConnectorError(
-          reason || 'Connector error',
-          this.exchangeId
-        ));
+        this.emit('error', new ConnectorError(reason || 'Connector error', this.exchangeId));
         break;
     }
   }
@@ -448,11 +444,14 @@ export abstract class BaseConnector extends EventEmitter {
       await this.reconnect();
       this.reconnectAttempts = 0;
     } catch (error) {
-      this.emit('error', new ConnectorError(
-        `Reconnection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        this.exchangeId,
-        { attempt: this.reconnectAttempts, error }
-      ));
+      this.emit(
+        'error',
+        new ConnectorError(
+          `Reconnection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          this.exchangeId,
+          { attempt: this.reconnectAttempts, error }
+        )
+      );
 
       // Wait before next attempt
       const delay = clamp(1000 * Math.pow(2, this.reconnectAttempts), 0, 30000);
@@ -471,7 +470,7 @@ export abstract class BaseConnector extends EventEmitter {
       originalError: error,
       ...context,
     });
-    
+
     this.emit('error', connectorError);
   }
 

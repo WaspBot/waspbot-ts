@@ -459,36 +459,63 @@ export function getOrderTypeDisplayName(orderType: OrderType): string {
  */
 export function validateCreateOrderRequest(request: CreateOrderRequest): void {
   if (!request.clientOrderId || request.clientOrderId.trim() === '') {
-    throw new WaspBotError('Client order ID is required.', 'INVALID_ORDER_INPUT', { field: 'clientOrderId' });
+    throw new WaspBotError('Client order ID is required.', 'INVALID_ORDER_INPUT', {
+      field: 'clientOrderId',
+    });
   }
   if (!request.tradingPair || request.tradingPair.trim() === '') {
-    throw new WaspBotError('Trading pair is required.', 'INVALID_ORDER_INPUT', { field: 'tradingPair' });
+    throw new WaspBotError('Trading pair is required.', 'INVALID_ORDER_INPUT', {
+      field: 'tradingPair',
+    });
   }
   if (!Object.values(OrderType).includes(request.orderType)) {
-    throw new WaspBotError('Invalid order type.', 'INVALID_ORDER_INPUT', { field: 'orderType', value: request.orderType });
+    throw new WaspBotError('Invalid order type.', 'INVALID_ORDER_INPUT', {
+      field: 'orderType',
+      value: request.orderType,
+    });
   }
   if (!Object.values(TradingSide).includes(request.side)) {
-    throw new WaspBotError('Invalid trading side.', 'INVALID_ORDER_INPUT', { field: 'side', value: request.side });
+    throw new WaspBotError('Invalid trading side.', 'INVALID_ORDER_INPUT', {
+      field: 'side',
+      value: request.side,
+    });
   }
   if (!request.amount || request.amount.lte(0)) {
-    throw new WaspBotError('Order amount must be greater than 0.', 'INVALID_ORDER_INPUT', { field: 'amount', value: request.amount?.toString() });
+    throw new WaspBotError('Order amount must be greater than 0.', 'INVALID_ORDER_INPUT', {
+      field: 'amount',
+      value: request.amount?.toString(),
+    });
   }
 
   if (requiresPrice(request.orderType)) {
     if (!request.price || request.price.lte(0)) {
-      throw new WaspBotError('Price is required and must be greater than 0 for this order type.', 'INVALID_ORDER_INPUT', { field: 'price', value: request.price?.toString() });
+      throw new WaspBotError(
+        'Price is required and must be greater than 0 for this order type.',
+        'INVALID_ORDER_INPUT',
+        { field: 'price', value: request.price?.toString() }
+      );
     }
   } else if (request.price !== undefined) {
     // For market orders, price should not be provided
-    throw new WaspBotError('Price should not be provided for market orders.', 'INVALID_ORDER_INPUT', { field: 'price', value: request.price?.toString() });
+    throw new WaspBotError(
+      'Price should not be provided for market orders.',
+      'INVALID_ORDER_INPUT',
+      { field: 'price', value: request.price?.toString() }
+    );
   }
 
   if (request.leverage !== undefined && request.leverage <= 0) {
-    throw new WaspBotError('Leverage must be greater than 0 if provided.', 'INVALID_ORDER_INPUT', { field: 'leverage', value: request.leverage });
+    throw new WaspBotError('Leverage must be greater than 0 if provided.', 'INVALID_ORDER_INPUT', {
+      field: 'leverage',
+      value: request.leverage,
+    });
   }
 
   if (request.position !== undefined && !Object.values(PositionAction).includes(request.position)) {
-    throw new WaspBotError('Invalid position action.', 'INVALID_ORDER_INPUT', { field: 'position', value: request.position });
+    throw new WaspBotError('Invalid position action.', 'INVALID_ORDER_INPUT', {
+      field: 'position',
+      value: request.position,
+    });
   }
 }
 

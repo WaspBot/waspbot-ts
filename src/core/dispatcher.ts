@@ -825,7 +825,9 @@ export class EventDispatcher extends EventEmitter {
    */
   public async emitEvent(event: BaseEvent): Promise<boolean> {
     if (!this._isReady) {
-      throw new Error(`EventDispatcher '${this.name}' is not ready to emit events. Call markAsReady() first.`);
+      throw new Error(
+        `EventDispatcher '${this.name}' is not ready to emit events. Call markAsReady() first.`
+      );
     }
 
     // Persist event if enabled
@@ -887,8 +889,9 @@ export class EventDispatcher extends EventEmitter {
    * Emit multiple events in batch (with persistence)
    */
   public async emitBatch(events: BaseEvent[]): Promise<void> {
-    let enqueuedCount = 0, droppedCount = 0;
-    
+    let enqueuedCount = 0,
+      droppedCount = 0;
+
     if (this.enablePersistence) {
       await this.eventStorage.saveEvents(events);
     }

@@ -13,7 +13,13 @@ export class HttpError extends Error {
   public readonly originalError?: AxiosError;
   public readonly responseData?: any;
 
-  constructor(message: string, config?: AxiosRequestConfig, response?: AxiosResponse, isNetworkError: boolean = false, originalError?: AxiosError) {
+  constructor(
+    message: string,
+    config?: AxiosRequestConfig,
+    response?: AxiosResponse,
+    isNetworkError: boolean = false,
+    originalError?: AxiosError
+  ) {
     super(message);
     this.name = 'HttpError';
     this.status = response?.status;
@@ -59,7 +65,10 @@ export class HttpClient {
       retryDelay: config.retryDelay ?? axiosRetry.exponentialDelay,
       retryCondition: (error: AxiosError) => {
         // Retry on network errors or 5xx status codes
-        return axiosRetry.isNetworkError(error) || (error.response?.status && error.response.status >= 500);
+        return (
+          axiosRetry.isNetworkError(error) ||
+          (error.response?.status && error.response.status >= 500)
+        );
       },
     });
 

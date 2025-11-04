@@ -5,9 +5,9 @@
 import { Decimal } from 'decimal.js';
 
 // Core primitives
-export type Timestamp = number;  // Unix timestamp in milliseconds
+export type Timestamp = number; // Unix timestamp in milliseconds
 export type ExchangeId = string;
-export type TradingPair = string;  // Format: "BTC-USDT"
+export type TradingPair = string; // Format: "BTC-USDT"
 export type OrderId = string;
 export type TradeId = string;
 export type StrategyId = string;
@@ -18,7 +18,7 @@ export type Quantity = Decimal;
 export type DecimalAmount = Decimal;
 
 // Event types
-export type EventType = 
+export type EventType =
   | 'ticker'
   | 'order_book'
   | 'trade'
@@ -37,7 +37,7 @@ export type EventType =
 // Trading sides
 export enum TradingSide {
   BUY = 'BUY',
-  SELL = 'SELL'
+  SELL = 'SELL',
 }
 
 // Order types
@@ -48,7 +48,7 @@ export enum OrderType {
   STOP_LOSS = 'STOP_LOSS',
   STOP_LOSS_LIMIT = 'STOP_LOSS_LIMIT',
   TAKE_PROFIT = 'TAKE_PROFIT',
-  TAKE_PROFIT_LIMIT = 'TAKE_PROFIT_LIMIT'
+  TAKE_PROFIT_LIMIT = 'TAKE_PROFIT_LIMIT',
 }
 
 // Order status
@@ -59,14 +59,14 @@ export enum OrderStatus {
   CANCELED = 'CANCELED',
   REJECTED = 'REJECTED',
   EXPIRED = 'EXPIRED',
-  PENDING_CANCEL = 'PENDING_CANCEL'
+  PENDING_CANCEL = 'PENDING_CANCEL',
 }
 
 // Time in force
 export enum TimeInForce {
   GTC = 'GTC', // Good Till Canceled
   IOC = 'IOC', // Immediate Or Cancel
-  FOK = 'FOK'  // Fill Or Kill
+  FOK = 'FOK', // Fill Or Kill
 }
 
 // Connector status
@@ -75,7 +75,7 @@ export enum ConnectorStatus {
   CONNECTED = 'CONNECTED',
   DISCONNECTED = 'DISCONNECTED',
   RECONNECTING = 'RECONNECTING',
-  ERROR = 'ERROR'
+  ERROR = 'ERROR',
 }
 
 // Strategy status
@@ -84,7 +84,7 @@ export enum StrategyStatus {
   STARTING = 'STARTING',
   RUNNING = 'RUNNING',
   STOPPING = 'STOPPING',
-  ERROR = 'ERROR'
+  ERROR = 'ERROR',
 }
 
 // Log levels
@@ -93,14 +93,14 @@ export enum LogLevel {
   WARN = 'WARN',
   INFO = 'INFO',
   DEBUG = 'DEBUG',
-  TRACE = 'TRACE'
+  TRACE = 'TRACE',
 }
 
 // Base error class
 export class WaspBotError extends Error {
   public readonly code?: string;
   public readonly context?: Record<string, unknown>;
-  
+
   constructor(message: string, code?: string, context?: Record<string, unknown>) {
     super(message);
     this.name = 'WaspBotError';
@@ -173,13 +173,13 @@ export interface PerformanceMetrics {
 export interface Fee {
   /** Fee amount */
   amount: DecimalAmount;
-  
+
   /** Asset that the fee is paid in */
   asset: string;
-  
+
   /** Fee type (maker, taker, gas, etc.) */
   type: 'MAKER' | 'TAKER' | 'GAS' | 'WITHDRAWAL' | 'DEPOSIT' | 'FUNDING';
-  
+
   /** Whether fee is added to cost or deducted from proceeds */
   addedToCost: boolean;
 }

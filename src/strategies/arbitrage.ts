@@ -1,10 +1,10 @@
 /**
  * Arbitrage Strategy for WaspBot-TS
- * 
+ *
  * This strategy identifies and executes arbitrage opportunities across multiple exchanges
  * or trading pairs. It monitors price differences and executes simultaneous buy/sell orders
  * to capture risk-free profits when the spread exceeds transaction costs.
- * 
+ *
  * Features:
  * - Multi-exchange arbitrage (triangular and cross-exchange)
  * - Real-time opportunity detection
@@ -244,16 +244,104 @@ export class ArbitrageStrategy extends EventEmitter {
     }
 
     if (this.config.tradingPairs.length === 0) {
-      throw new StrategyError('At least one trading pair must be specified', this.config.strategyId);
+      throw new StrategyError(
+        'At least one trading pair must be specified',
+        this.config.strategyId
+      );
     }
 
-    if (this.config.exchanges.length < 2 && this.config.arbitrageType === ArbitrageType.CROSS_EXCHANGE) {
-      throw new StrategyError('Cross-exchange arbitrage requires at least 2 exchanges', this.config.strategyId);
+    if (
+      this.config.exchanges.length < 2 &&
+      this.config.arbitrageType === ArbitrageType.CROSS_EXCHANGE
+    ) {
+      throw new StrategyError(
+        'Cross-exchange arbitrage requires at least 2 exchanges',
+        this.config.strategyId
+      );
+    }
+
+    if (this.config.maxPositionSize.lte(0)) {
+      throw new StrategyError('Maximum position size must be positive', this.config.strategyId);
+    }
+
+    if (this.config.maxCapitalPerCycle.lte(0)) {
+      throw new StrategyError('Maximum capital per cycle must be positive', this.config.strategyId);
+    }
+
+    if (this.config.slippageTolerance.lt(0) || this.config.slippageTolerance.gte(1)) {
+      throw new StrategyError(
+        'Slippage tolerance must be between 0 and 1 (exclusive)',
+        this.config.strategyId
+      );
+    }
+
+    if (this.config.maxExecutionLatency <= 0) {
+      throw new StrategyError('Maximum execution latency must be positive', this.config.strategyId);
+    }
+
+    if (this.config.opportunityCooldown < 0) {
+      throw new StrategyError('Opportunity cooldown cannot be negative', this.config.strategyId);
+    }
+
+    if (this.config.includeFees) {
+      if (this.config.fees.size === 0) {
+        throw new StrategyError(
+          'Fees must be configured if includeFees is true',
+          this.config.strategyId
+        );
+      }
+
+      for (const exchangeId of this.config.exchanges) {
+        const feeConfig = this.config.fees.get(exchangeId);
+        if (!feeConfig) {
+          throw new StrategyError(
+            `Fees missing for exchange: ${exchangeId}`,
+            this.config.strategyId
+          );
+        }
+
+        // Ensure both maker and taker are provided. Adjust null/undefined checks
+        // depending on the feeConfig types used in your project (e.g. BigNumber).
+        if (feeConfig.maker === undefined || feeConfig.maker === null) {
+          throw new StrategyError(
+            `Maker fee missing for exchange: ${exchangeId}`,
+            this.config.strategyId
+          );
+        }
+        if (feeConfig.taker === undefined || feeConfig.taker === null) {
+          throw new StrategyError(
+            `Taker fee missing for exchange: ${exchangeId}`,
+            this.config.strategyId
+          );
+        }
+      }
+    }
+
+    // Risk management checks
+    if (this.config.riskManagement.maxDailyLoss.lte(0)) {
+      throw new StrategyError('Maximum daily loss must be positive', this.config.strategyId);
+    }
+
+    if (this.config.riskManagement.maxOpenPositions <= 0) {
+      throw new StrategyError('Maximum open positions must be positive', this.config.strategyId);
+    }
+
+    if (
+      this.config.riskManagement.stopLossPercent.lt(0) ||
+      this.config.riskManagement.stopLossPercent.gte(1)
+    ) {
+      throw new StrategyError(
+        'Stop loss percent must be between 0 and 1 (exclusive)',
+        this.config.strategyId
+      );
     }
 
     for (const exchangeId of this.config.exchanges) {
       if (!this.connectors.has(exchangeId)) {
-        throw new StrategyError(`Connector not found for exchange: ${exchangeId}`, this.config.strategyId);
+        throw new StrategyError(
+          `Connector not found for exchange: ${exchangeId}`,
+          this.config.strategyId
+        );
       }
     }
   }
@@ -459,7 +547,9 @@ export class ArbitrageStrategy extends EventEmitter {
   ): void {
     // Use ask price for buying and bid price for selling
     const buyPrice = new Decimal(buyTicker.askPrice?.toString() || buyTicker.lastPrice.toString());
-    const sellPrice = new Decimal(sellTicker.bidPrice?.toString() || sellTicker.lastPrice.toString());
+    const sellPrice = new Decimal(
+      sellTicker.bidPrice?.toString() || sellTicker.lastPrice.toString()
+    );
 
     // Calculate raw spread
     const rawSpread = sellPrice.minus(buyPrice).div(buyPrice);
@@ -480,11 +570,7 @@ export class ArbitrageStrategy extends EventEmitter {
       // Calculate suggested quantity based on available liquidity
       const buyQuantity = new Decimal(buyTicker.askQuantity?.toString() || '0');
       const sellQuantity = new Decimal(sellTicker.bidQuantity?.toString() || '0');
-      const suggestedQuantity = Decimal.min(
-        buyQuantity,
-        sellQuantity,
-        this.config.maxPositionSize
-      );
+      const suggestedQuantity = Decimal.min(buyQuantity, sellQuantity, this.config.maxPositionSize);
 
       if (suggestedQuantity.gt(0)) {
         const estimatedProfit = suggestedQuantity.mul(buyPrice).mul(netSpread);
@@ -572,14 +658,12 @@ export class ArbitrageStrategy extends EventEmitter {
   ): void {
     // Calculate the effective exchange rate through the triangular path
     // This is a simplified version - production would need more sophisticated calculations
-
     // Example calculation (commented out as not fully implemented):
     // const price1 = new Decimal(ticker1.lastPrice.toString());
     // const price2 = new Decimal(ticker2.lastPrice.toString());
     // const price3 = new Decimal(ticker3.lastPrice.toString());
     // const effectiveRate = price1.mul(price2).mul(price3);
     // const profit = effectiveRate.minus(1);
-
     // Apply similar logic as cross-exchange arbitrage
     // TODO: Implement triangular arbitrage evaluation
   }
@@ -627,7 +711,7 @@ export class ArbitrageStrategy extends EventEmitter {
 
     Logger.info(
       `Arbitrage opportunity detected: ${opportunity.buyExchange} -> ${opportunity.sellExchange} ` +
-      `| Profit: ${opportunity.profitPercent.toFixed(4)}% | Qty: ${opportunity.suggestedQuantity.toString()}`
+        `| Profit: ${opportunity.profitPercent.toFixed(4)}% | Qty: ${opportunity.suggestedQuantity.toString()}`
     );
 
     this.emit('opportunity_detected', opportunity);
@@ -700,7 +784,7 @@ export class ArbitrageStrategy extends EventEmitter {
 
       Logger.info(
         `Arbitrage executed successfully: ${opportunity.id} | ` +
-        `Profit: ${result.realizedProfit?.toFixed(4)}`
+          `Profit: ${result.realizedProfit?.toFixed(4)}`
       );
 
       this.emit('arbitrage_executed', result);

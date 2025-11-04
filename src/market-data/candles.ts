@@ -2,12 +2,7 @@
  * Candlestick data types for WaspBot-TS
  */
 
-import {
-  Timestamp,
-  ExchangeId,
-  TradingPair,
-  DecimalAmount,
-} from '../types/common.js';
+import { Timestamp, ExchangeId, TradingPair, DecimalAmount } from '../types/common.js';
 
 /**
  * OHLCV candlestick data

@@ -25,7 +25,10 @@ export class WsClient {
   }
 
   public connect(): void {
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
+    ) {
       Logger.info(`WsClient: Already connected or connecting to ${this.url}`);
       return;
     }
@@ -34,7 +37,9 @@ export class WsClient {
       this.isReconnecting = true;
     }
 
-    Logger.info(`WsClient: Attempting to connect to ${this.url} (Attempt ${this.reconnectAttempts + 1}/${this.maxRetries + 1})`);
+    Logger.info(
+      `WsClient: Attempting to connect to ${this.url} (Attempt ${this.reconnectAttempts + 1}/${this.maxRetries + 1})`
+    );
     this.ws = new WebSocket(this.url);
 
     this.ws.onopen = () => {
@@ -59,16 +64,22 @@ export class WsClient {
 
     this.ws.onclose = (event: WebSocket.CloseEvent) => {
       this.isConnected = false;
-      Logger.warn(`WsClient: Disconnected from ${this.url} (Code: ${event.code}, Reason: ${event.reason})`);
+      Logger.warn(
+        `WsClient: Disconnected from ${this.url} (Code: ${event.code}, Reason: ${event.reason})`
+      );
       if (this.reconnectAttempts < this.maxRetries) {
         this.reconnectAttempts++;
         this.reconnectCounter++;
         this.lastReconnectTimestamp = new Date();
         const delay = this.retryDelayMs * Math.pow(2, this.reconnectAttempts - 1);
-        Logger.info(`WsClient: Retrying connection to ${this.url} in ${delay}ms... (Attempt ${this.reconnectAttempts}/${this.maxRetries})`);
+        Logger.info(
+          `WsClient: Retrying connection to ${this.url} in ${delay}ms... (Attempt ${this.reconnectAttempts}/${this.maxRetries})`
+        );
         this.reconnectTimer = setTimeout(() => this.connect(), delay);
       } else {
-        Logger.error(`WsClient: Max reconnect attempts reached for ${this.url}. Permanent disconnection.`);
+        Logger.error(
+          `WsClient: Max reconnect attempts reached for ${this.url}. Permanent disconnection.`
+        );
         this.isReconnecting = false;
       }
     };

@@ -2,12 +2,7 @@
  * Order book data types for WaspBot-TS
  */
 
-import {
-  Timestamp,
-  ExchangeId,
-  TradingPair,
-  DecimalAmount,
-} from '../types/common.js';
+import { Timestamp, ExchangeId, TradingPair, DecimalAmount } from '../types/common.js';
 
 /**
  * Order book entry representing a price level
