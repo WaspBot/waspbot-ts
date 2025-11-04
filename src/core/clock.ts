@@ -49,7 +49,9 @@ export class Clock {
     }
 
     if (!dispatcher.isReady()) {
-      throw new Error(`Cannot start emitting events: EventDispatcher '${dispatcher.name}' is not ready. Call markAsReady() first.`);
+      throw new Error(
+        `Cannot start emitting events: EventDispatcher '${dispatcher.name}' is not ready. Call markAsReady() first.`
+      );
     }
 
     this.emissionStarted = true;
@@ -58,14 +60,18 @@ export class Clock {
         const event = this._createTickEvent();
         const maybePromise = dispatcher.emitEvent(event);
         if (maybePromise && typeof (maybePromise as Promise<any>).catch === 'function') {
-          (maybePromise as Promise<any>).catch(err => console.error('Failed to emit tick event:', err));
+          (maybePromise as Promise<any>).catch(err =>
+            console.error('Failed to emit tick event:', err)
+          );
         }
       } catch (err) {
         console.error('Failed to emit tick event synchronously:', err);
       }
     }, this.tickInterval);
 
-    console.log(`Clock started, EventDispatcher '${dispatcher.name}' is ready: ${dispatcher.isReady()}`);
+    console.log(
+      `Clock started, EventDispatcher '${dispatcher.name}' is ready: ${dispatcher.isReady()}`
+    );
   }
 
   public stopEmittingEvents(): void {

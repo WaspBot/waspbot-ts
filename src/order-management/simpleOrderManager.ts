@@ -1,6 +1,25 @@
-import { OrderManager, OrderPlacementResult, OrderCancellationResult } from '../types/orders-management';
-import { CreateOrderRequest, OrderState, validateCreateOrderRequest, InFlightOrder } from '../types/orders-basic';
-import { WaspBotError, ExchangeId, TradingPair, TradingSide, OrderType, Price, Quantity, TimeInForce, PositionAction } from '../types/common';
+import {
+  OrderManager,
+  OrderPlacementResult,
+  OrderCancellationResult,
+} from '../types/orders-management';
+import {
+  CreateOrderRequest,
+  OrderState,
+  validateCreateOrderRequest,
+  InFlightOrder,
+} from '../types/orders-basic';
+import {
+  WaspBotError,
+  ExchangeId,
+  TradingPair,
+  TradingSide,
+  OrderType,
+  Price,
+  Quantity,
+  TimeInForce,
+  PositionAction,
+} from '../types/common';
 import { isOrderInState, filterInFlightOrdersByState } from './orderUtils';
 
 class InFlightOrderImpl implements InFlightOrder {
@@ -194,19 +213,47 @@ export class SimpleOrderManager implements OrderManager {
   }
 
   // ...implement other OrderManager methods as needed with stubs or logic
-  async cancelOrders(clientOrderIds: string[]) { throw new Error('Not implemented'); }
-  async cancelAllOrders(tradingPair?: string) { throw new Error('Not implemented'); }
-  async modifyOrder(clientOrderId: string, modification: any) { throw new Error('Not implemented'); }
-  async getOrder(clientOrderId: string) { return this.orders.get(clientOrderId) || null; }
-  async getOrderByExchangeId(exchangeOrderId: string) { throw new Error('Not implemented'); }
-  async getOrders(filter?: any) { throw new Error('Not implemented'); }
-  async getActiveOrders() {
-    return Array.from(this.orders.values()).filter(order => !isOrderInState(order, [OrderState.DONE, OrderState.FILLED, OrderState.CANCELLED, OrderState.FAILED]));
+  async cancelOrders(clientOrderIds: string[]) {
+    throw new Error('Not implemented');
   }
-  async getOrdersForPair(tradingPair: string) { throw new Error('Not implemented'); }
-  async getOrdersForExchange(exchangeId: string) { throw new Error('Not implemented'); }
-  async updateOrderState(update: any) { throw new Error('Not implemented'); }
-  async processTradeUpdate(trade: any) { throw new Error('Not implemented'); }
+  async cancelAllOrders(tradingPair?: string) {
+    throw new Error('Not implemented');
+  }
+  async modifyOrder(clientOrderId: string, modification: any) {
+    throw new Error('Not implemented');
+  }
+  async getOrder(clientOrderId: string) {
+    return this.orders.get(clientOrderId) || null;
+  }
+  async getOrderByExchangeId(exchangeOrderId: string) {
+    throw new Error('Not implemented');
+  }
+  async getOrders(filter?: any) {
+    throw new Error('Not implemented');
+  }
+  async getActiveOrders() {
+    return Array.from(this.orders.values()).filter(
+      order =>
+        !isOrderInState(order, [
+          OrderState.DONE,
+          OrderState.FILLED,
+          OrderState.CANCELLED,
+          OrderState.FAILED,
+        ])
+    );
+  }
+  async getOrdersForPair(tradingPair: string) {
+    throw new Error('Not implemented');
+  }
+  async getOrdersForExchange(exchangeId: string) {
+    throw new Error('Not implemented');
+  }
+  async updateOrderState(update: any) {
+    throw new Error('Not implemented');
+  }
+  async processTradeUpdate(trade: any) {
+    throw new Error('Not implemented');
+  }
   async markOrderFailed(clientOrderId: string, reason: string) {
     const order = this.orders.get(clientOrderId);
     if (order) {
@@ -214,11 +261,21 @@ export class SimpleOrderManager implements OrderManager {
       this.stopTracking(clientOrderId);
     }
   }
-  async startTracking(order: any) { throw new Error('Not implemented'); }
-  async getExecutionStats(period?: any) { throw new Error('Not implemented'); }
-  async getPerformanceMetrics() { throw new Error('Not implemented'); }
-  async getLostOrders() { throw new Error('Not implemented'); }
-  async reconcileOrders(exchangeId: string) { throw new Error('Not implemented'); }
+  async startTracking(order: any) {
+    throw new Error('Not implemented');
+  }
+  async getExecutionStats(period?: any) {
+    throw new Error('Not implemented');
+  }
+  async getPerformanceMetrics() {
+    throw new Error('Not implemented');
+  }
+  async getLostOrders() {
+    throw new Error('Not implemented');
+  }
+  async reconcileOrders(exchangeId: string) {
+    throw new Error('Not implemented');
+  }
 
   /**
    * Get orders in specific state.

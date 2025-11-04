@@ -20,7 +20,9 @@ export class UniswapConnector {
     this.logInterval = setInterval(() => {
       const reconnects = this.wsClient.getReconnectCounter();
       const lastReconnect = this.wsClient.getLastReconnectTimestamp();
-      Logger.info(`UniswapConnector Telemetry: Reconnects = ${reconnects}, Last Reconnect = ${lastReconnect ? lastReconnect.toISOString() : 'N/A'}`);
+      Logger.info(
+        `UniswapConnector Telemetry: Reconnects = ${reconnects}, Last Reconnect = ${lastReconnect ? lastReconnect.toISOString() : 'N/A'}`
+      );
     }, 60000); // Log every 60 seconds
   }
 

@@ -134,6 +134,38 @@ describe('ArbitrageStrategy', () => {
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow('Fees must be configured if includeFees is true');
   });
 
+  it('should throw StrategyError if includeFees is true and an exchange is missing from fees map', () => {
+    const fees = new Map([[ExchangeId.BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }]]);
+    const config = { ...defaultConfig, includeFees: true, fees: fees, exchanges: [ExchangeId.BINANCE, ExchangeId.KUCOIN] };
+    expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow(StrategyError);
+    expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow('Fees missing for exchange: KUCOIN');
+  });
+
+  it('should throw StrategyError if includeFees is true and maker fee is missing for an exchange', () => {
+    const fees = new Map([
+      [ExchangeId.BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
+      [ExchangeId.KUCOIN, { maker: null as any, taker: new Decimal(0.001) }],
+    ]);
+    const config = { ...defaultConfig, includeFees: true, fees: fees };
+    expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow(StrategyError);
+    expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow('Maker fee missing for exchange: KUCOIN');
+  });
+
+  it('should throw StrategyError if includeFees is true and taker fee is missing for an exchange', () => {
+    const fees = new Map([
+      [ExchangeId.BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
+      [ExchangeId.KUCOIN, { maker: new Decimal(0.001), taker: null as any }],
+    ]);
+    const config = { ...defaultConfig, includeFees: true, fees: fees };
+    expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow(StrategyError);
+    expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow('Taker fee missing for exchange: KUCOIN');
+  });
+
+  it('should not throw StrategyError if includeFees is false and fees map is empty', () => {
+    const config = { ...defaultConfig, includeFees: false, fees: new Map() };
+    expect(() => new ArbitrageStrategy(config, mockConnectors)).not.toThrow();
+  });
+
   it('should throw StrategyError if maxDailyLoss is not positive', () => {
     const config = { ...defaultConfig, riskManagement: { ...defaultConfig.riskManagement, maxDailyLoss: new Decimal(0) } };
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow(StrategyError);
