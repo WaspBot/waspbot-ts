@@ -1,8 +1,14 @@
 import { ArbitrageStrategy, ArbitrageConfig, ArbitrageType } from '../src/strategies/arbitrage.js';
 import { BaseConnector } from '../src/connectors/base-connector.js';
-import { ExchangeId, TradingPair, StrategyError } from '../src/types/common.js';
+import { StrategyError } from '../src/types/common.js';
+import type { ExchangeId, TradingPair } from '../src/types/common.js';
 import { Logger } from '../src/core/logger.js';
 import Decimal from 'decimal.js';
+
+// runtime constants typed as the type aliases
+const BINANCE: ExchangeId = 'BINANCE';
+const KUCOIN: ExchangeId = 'KUCOIN';
+const BTC_USDT: TradingPair = 'BTC-USDT';
 
 // Mock Logger to prevent console output during tests
 jest.mock('../src/core/logger.js', () => ({
@@ -37,20 +43,20 @@ describe('ArbitrageStrategy', () => {
 
   beforeEach(() => {
     mockConnectors = new Map<ExchangeId, BaseConnector>();
-    mockConnectors.set(ExchangeId.BINANCE, new MockConnector(ExchangeId.BINANCE));
-    mockConnectors.set(ExchangeId.KUCOIN, new MockConnector(ExchangeId.KUCOIN));
+    mockConnectors.set(BINANCE, new MockConnector(BINANCE));
+    mockConnectors.set(KUCOIN, new MockConnector(KUCOIN));
 
     defaultConfig = {
       strategyId: 'test-arbitrage',
-      tradingPairs: [TradingPair.BTC_USDT],
-      exchanges: [ExchangeId.BINANCE, ExchangeId.KUCOIN],
+      tradingPairs: [BTC_USDT],
+      exchanges: [BINANCE, KUCOIN],
       minProfitThreshold: new Decimal(0.001),
       maxPositionSize: new Decimal(10),
       maxCapitalPerCycle: new Decimal(1000),
       includeFees: true,
       fees: new Map([
-        [ExchangeId.BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
-        [ExchangeId.KUCOIN, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
+        [BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
+        [KUCOIN, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
       ]),
       slippageTolerance: new Decimal(0.0005),
       maxExecutionLatency: 500,
@@ -83,13 +89,13 @@ describe('ArbitrageStrategy', () => {
   });
 
   it('should throw StrategyError if cross-exchange arbitrage has less than 2 exchanges', () => {
-    const config = { ...defaultConfig, exchanges: [ExchangeId.BINANCE], arbitrageType: ArbitrageType.CROSS_EXCHANGE };
+    const config = { ...defaultConfig, exchanges: [BINANCE], arbitrageType: ArbitrageType.CROSS_EXCHANGE };
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow(StrategyError);
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow('Cross-exchange arbitrage requires at least 2 exchanges');
   });
 
   it('should throw StrategyError if a connector is not found for an exchange', () => {
-    const config = { ...defaultConfig, exchanges: [ExchangeId.BINANCE, 'UNKNOWN_EXCHANGE' as ExchangeId] };
+    const config = { ...defaultConfig, exchanges: [BINANCE, 'UNKNOWN_EXCHANGE' as ExchangeId] };
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow(StrategyError);
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow('Connector not found for exchange: UNKNOWN_EXCHANGE');
   });
@@ -135,16 +141,16 @@ describe('ArbitrageStrategy', () => {
   });
 
   it('should throw StrategyError if includeFees is true and an exchange is missing from fees map', () => {
-    const fees = new Map([[ExchangeId.BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }]]);
-    const config = { ...defaultConfig, includeFees: true, fees: fees, exchanges: [ExchangeId.BINANCE, ExchangeId.KUCOIN] };
+    const fees = new Map([[BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }]]);
+    const config = { ...defaultConfig, includeFees: true, fees: fees, exchanges: [BINANCE, KUCOIN] };
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow(StrategyError);
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow('Fees missing for exchange: KUCOIN');
   });
 
   it('should throw StrategyError if includeFees is true and maker fee is missing for an exchange', () => {
     const fees = new Map([
-      [ExchangeId.BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
-      [ExchangeId.KUCOIN, { maker: null as any, taker: new Decimal(0.001) }],
+      [BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
+      [KUCOIN, { maker: null as any, taker: new Decimal(0.001) }],
     ]);
     const config = { ...defaultConfig, includeFees: true, fees: fees };
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow(StrategyError);
@@ -153,8 +159,8 @@ describe('ArbitrageStrategy', () => {
 
   it('should throw StrategyError if includeFees is true and taker fee is missing for an exchange', () => {
     const fees = new Map([
-      [ExchangeId.BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
-      [ExchangeId.KUCOIN, { maker: new Decimal(0.001), taker: null as any }],
+      [BINANCE, { maker: new Decimal(0.001), taker: new Decimal(0.001) }],
+      [KUCOIN, { maker: new Decimal(0.001), taker: null as any }],
     ]);
     const config = { ...defaultConfig, includeFees: true, fees: fees };
     expect(() => new ArbitrageStrategy(config, mockConnectors)).toThrow(StrategyError);
