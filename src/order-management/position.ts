@@ -13,8 +13,8 @@
  * - Portfolio Analytics: Performance metrics and risk calculations
  */
 
-import { Price, Quantity, Timestamp, DecimalAmount } from './common.js';
-import { PositionSide, PositionMode, PositionAction } from './orders-basic.js';
+import { Price, Quantity, Timestamp, DecimalAmount } from '../types/common';
+import { PositionSide, PositionMode, PositionAction } from '../order-management/order';
 
 // ============================================================================
 // Position Management Types

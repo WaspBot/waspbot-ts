@@ -204,12 +204,12 @@ describe('OrderBookManager', () => {
 
   it('should throw an error if a bid entry has non-Decimal price', () => {
     const invalidSnapshot = { ...initialSnapshot, bids: [{ price: "abc", quantity: new Decimal(1) }] as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError(/Invalid bids entry at index 0: 'price' or 'quantity' cannot be converted to Decimal./);
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow(/Invalid bids entry at index 0: 'price' or 'quantity' cannot be converted to Decimal./);
   });
 
   it('should throw an error if an ask entry has non-Decimal quantity', () => {
     const invalidSnapshot = { ...initialSnapshot, asks: [{ price: new Decimal(100), quantity: {} }] as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError(/Invalid asks entry at index 0: 'price' or 'quantity' cannot be converted to Decimal./);
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow(/Invalid asks entry at index 0: 'price' or 'quantity' cannot be converted to Decimal./);
   });
 
   it('should correctly convert string/number prices and quantities to Decimal', () => {
