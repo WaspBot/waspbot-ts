@@ -53,8 +53,7 @@ export * from '../order-management/order-manager';
 
 // TODO: Add additional type modules as they are implemented
 
-// Version information
-export const WASPBOT_VERSION = '0.1.0';
+
 export const API_VERSION = 'v1';
 
 // Re-export Decimal class for runtime

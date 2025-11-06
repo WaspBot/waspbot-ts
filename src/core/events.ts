@@ -3,7 +3,7 @@
  * Basic event types and interfaces as requested in Phase 1.1
  */
 
-import { Timestamp } from '../../types/common.js';
+import { Timestamp } from '../../types/common';
 
 // ============================================================================
 // Core Event Enums

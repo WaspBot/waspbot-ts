@@ -26,7 +26,7 @@ import {
   TradingPair,
   ExchangeId,
   WaspBotError,
-} from './common.js';
+} from './common';
 
 import {
   OrderState,
@@ -36,7 +36,7 @@ import {
   OrderUpdate,
   TradeUpdate,
   validateCreateOrderRequest,
-} from './orders-basic.js';
+} from './orders-basic';
 
 import {
   Position,
@@ -46,7 +46,7 @@ import {
   PortfolioPerformance,
   PortfolioRisk,
   PortfolioSnapshot,
-} from './orders-portfolio.js';
+} from './orders-portfolio';
 
 // ============================================================================
 // Order Manager Interface
