@@ -86,9 +86,66 @@ export class OrderBookManager {
   private resubscribeCallback: () => void;
 
   constructor(initialSnapshot: OrderBook, resubscribeCallback: () => void) {
-    this.orderBook = initialSnapshot;
+    if (!initialSnapshot) {
+      throw new Error('Initial snapshot cannot be null or undefined.');
+    }
+
+    const requiredFields = ['exchangeId', 'symbol', 'bids', 'asks', 'lastUpdateId', 'timestamp'];
+    for (const field of requiredFields) {
+      if (!(field in initialSnapshot) || initialSnapshot[field] === undefined || initialSnapshot[field] === null) {
+        throw new Error(`Initial snapshot is missing required field: ${field}.`);
+      }
+    }
+
+    if (!Array.isArray(initialSnapshot.bids)) {
+      throw new Error('Initial snapshot bids must be an array.');
+    }
+    if (!Array.isArray(initialSnapshot.asks)) {
+      throw new Error('Initial snapshot asks must be an array.');
+    }
+
+    // Validate and coerce bids and asks entries
+    const validatedBids = OrderBookManager.validateAndCoerceOrderBookEntries(initialSnapshot.bids, 'bids');
+    const validatedAsks = OrderBookManager.validateAndCoerceOrderBookEntries(initialSnapshot.asks, 'asks');
+
+    this.orderBook = {
+      ...initialSnapshot,
+      bids: validatedBids,
+      asks: validatedAsks,
+    };
     this.resubscribeCallback = resubscribeCallback;
     this.calculateAndStoreChecksum();
+  }
+
+  private static validateAndCoerceOrderBookEntries(entries: any[], side: 'bids' | 'asks'): OrderBookEntry[] {
+    return entries.map((entry, index) => {
+      if (typeof entry !== 'object' || entry === null) {
+        throw new Error(`Invalid ${side} entry at index ${index}: must be an object.`);
+      }
+      if (!('price' in entry) || !('quantity' in entry)) {
+        throw new Error(`Invalid ${side} entry at index ${index}: missing 'price' or 'quantity' field.`);
+      }
+
+      let price: Decimal;
+      let quantity: Decimal;
+
+      try {
+        price = new Decimal(entry.price);
+        quantity = new Decimal(entry.quantity);
+      } catch (e) {
+        throw new Error(`Invalid ${side} entry at index ${index}: 'price' or 'quantity' cannot be converted to Decimal. Error: ${e.message}`);
+      }
+
+      if (price.isNaN() || quantity.isNaN()) {
+        throw new Error(`Invalid ${side} entry at index ${index}: 'price' or 'quantity' resulted in NaN after Decimal conversion.`);
+      }
+
+      return {
+        price: price,
+        quantity: quantity,
+        updateId: entry.updateId, // Optional field
+      };
+    });
   }
 
   public applyDiff(diff: OrderBookDiff): void {

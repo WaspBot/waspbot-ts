@@ -12,37 +12,37 @@
 export * from './types';
 
 // Core components
-export * from './core/events.js';
-export * from './core/clock.js';
-export * from './core/logger.js';
-export * from './core/state-manager.js';
+export * from './core/events';
+export * from './core/clock';
+export * from './core/logger';
+export * from './core/state-manager';
 
 // Connectors
-export * from './connectors/base-connector.js';
-export * from './connectors/binance.js';
-export * from './connectors/kucoin.js';
-export * from './connectors/uniswap.js';
+export * from './connectors/base-connector';
+export * from './connectors/binance';
+export * from './connectors/kucoin';
+export * from './connectors/uniswap';
 
 // Strategies
-export * from './strategies/base-strategy.js';
-export * from './strategies/ping-pong.js';
-export * from './strategies/trend-following.js';
-export * from './strategies/arbitrage.js';
+export * from './strategies/base-strategy';
+export * from './strategies/ping-pong';
+export * from './strategies/trend-following';
+export * from './strategies/arbitrage';
 
 // Market data
-export * from './market-data/ticker.js';
-export * from './market-data/candles.js';
-export * from './market-data/order-book.js';
+export * from './market-data/ticker';
+export * from './market-data/candles';
+export * from './market-data/order-book';
 
 // Order management
-export * from './order-management/order.js';
-export * from './order-management/order-manager.js';
-export * from './order-management/position.js';
+export * from './order-management/order';
+export * from './order-management/order-manager';
+export * from './order-management/position';
 
 // Utils
-export * from './utils/http-client.js';
-export * from './utils/ws-client.js';
-export * from './utils/math.js';
+export * from './utils/http-client';
+export * from './utils/ws-client';
+export * from './utils/math';
 
 // Version information
 export const VERSION = '0.1.0';
