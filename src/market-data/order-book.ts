@@ -3,6 +3,7 @@
  */
 
 import { Timestamp, ExchangeId, TradingPair, DecimalAmount } from '../types/common.js';
+import { Decimal } from 'decimal.js';
 
 /**
  * Order book entry representing a price level
@@ -123,7 +124,11 @@ export class OrderBookManager {
   }
 
   public getOrderBook(): OrderBook {
-    return { ...this.orderBook };
+    return {
+      ...this.orderBook,
+      bids: this.orderBook.bids.map(entry => ({ ...entry })),
+      asks: this.orderBook.asks.map(entry => ({ ...entry })),
+    };
   }
 
   private applyEntry(entries: OrderBookEntry[], diffEntry: OrderBookEntry): void {
@@ -143,17 +148,24 @@ export class OrderBookManager {
   }
 
   private calculateChecksum(): number {
-    // Simple checksum: sum of prices and quantities of top N bids and asks
     const N = 10; // Number of top entries to consider for checksum
-    let checksum = 0;
+    let checksumString = '';
 
     for (let i = 0; i < Math.min(N, this.orderBook.bids.length); i++) {
-      checksum += this.orderBook.bids[i].price.toNumber() * 1000000 + this.orderBook.bids[i].quantity.toNumber();
+      checksumString += this.orderBook.bids[i].price.toString() + ':' + this.orderBook.bids[i].quantity.toString() + '|';
     }
     for (let i = 0; i < Math.min(N, this.orderBook.asks.length); i++) {
-      checksum += this.orderBook.asks[i].price.toNumber() * 1000000 + this.orderBook.asks[i].quantity.toNumber();
+      checksumString += this.orderBook.asks[i].price.toString() + ':' + this.orderBook.asks[i].quantity.toString() + '|';
     }
-    return checksum;
+
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < checksumString.length; i++) {
+      const char = checksumString.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash |= 0; // Convert to 32bit integer
+    }
+    return hash;
   }
 
   private calculateAndStoreChecksum(): void {
@@ -165,8 +177,9 @@ export class OrderBookManager {
     if (currentChecksum !== this.lastChecksum) {
       console.warn(`Checksum mismatch for ${this.orderBook.symbol}. Triggering resubscribe.`);
       this.resubscribeCallback();
+      return; // Do not update lastChecksum on mismatch
     }
-    this.lastChecksum = currentChecksum; // Update for next interval
+    this.lastChecksum = currentChecksum; // Update only if checksums match
   }
 }
 

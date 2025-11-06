@@ -100,8 +100,9 @@ describe('OrderBookManager', () => {
 
   it('should trigger resubscribe if checksums diverge', () => {
     const manager = new OrderBookManager(initialSnapshot, resubscribeMock);
-    // Manually modify the order book to cause a checksum mismatch without applying a diff
-    manager.getOrderBook().bids.push({ price: new Decimal(90), quantity: new Decimal(1) });
+    // Manually modify the internal order book to cause a checksum mismatch
+    // @ts-ignore - Accessing private property for testing purposes
+    manager.orderBook.bids.push({ price: new Decimal(90), quantity: new Decimal(1) });
 
     // Apply a dummy diff to trigger checksum verification
     const diff: OrderBookDiff = {
