@@ -26,8 +26,8 @@ import {
   Timestamp,
   StrategyStatus,
   StrategyError,
-} from '../types/common.js';
-import { clamp, safeDivide } from '../utils/math.js';
+} from '../types/common';
+import { clamp, safeDivide } from '../utils/math';
 
 /**
  * Configuration for the arbitrage strategy
