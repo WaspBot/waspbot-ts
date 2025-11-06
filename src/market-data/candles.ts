@@ -23,6 +23,20 @@ export interface Candle {
   takerBuyQuoteVolume: DecimalAmount;
   numberOfTrades: number;
   isClosed: boolean;
+  vwap: DecimalAmount; // Volume Weighted Average Price
+}
+
+/**
+ * Raw trade data
+ */
+export interface Trade {
+  exchangeId: ExchangeId;
+  symbol: TradingPair;
+  price: DecimalAmount;
+  amount: DecimalAmount; // Base asset amount
+  quoteAmount: DecimalAmount; // Quote asset amount (price * amount)
+  timestamp: Timestamp;
+  isBuyerMaker: boolean;
 }
 
 export enum CandleInterval {
