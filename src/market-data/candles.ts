@@ -29,7 +29,7 @@ export interface Candle {
 /**
  * Raw trade data
  */
-export interface Trade {
+export interface RawTrade {
   exchangeId: ExchangeId;
   symbol: TradingPair;
   price: DecimalAmount;
