@@ -145,61 +145,61 @@ describe('OrderBookManager', () => {
 
   // New validation tests
   it('should throw an error if initialSnapshot is null', () => {
-    expect(() => new OrderBookManager(null as any, resubscribeMock)).toThrowError('Initial snapshot cannot be null or undefined.');
+    expect(() => new OrderBookManager(null as any, resubscribeMock)).toThrow('Initial snapshot cannot be null or undefined.');
   });
 
   it('should throw an error if initialSnapshot is undefined', () => {
-    expect(() => new OrderBookManager(undefined as any, resubscribeMock)).toThrowError('Initial snapshot cannot be null or undefined.');
+    expect(() => new OrderBookManager(undefined as any, resubscribeMock)).toThrow('Initial snapshot cannot be null or undefined.');
   });
 
   it('should throw an error if initialSnapshot is missing exchangeId', () => {
     const invalidSnapshot = { ...initialSnapshot, exchangeId: undefined as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError('Initial snapshot is missing required field: exchangeId.');
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow('Initial snapshot is missing required field: exchangeId.');
   });
 
   it('should throw an error if initialSnapshot is missing symbol', () => {
     const invalidSnapshot = { ...initialSnapshot, symbol: undefined as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError('Initial snapshot is missing required field: symbol.');
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow('Initial snapshot is missing required field: symbol.');
   });
 
   it('should throw an error if initialSnapshot is missing bids', () => {
     const invalidSnapshot = { ...initialSnapshot, bids: undefined as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError('Initial snapshot is missing required field: bids.');
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow('Initial snapshot is missing required field: bids.');
   });
 
   it('should throw an error if initialSnapshot is missing asks', () => {
     const invalidSnapshot = { ...initialSnapshot, asks: undefined as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError('Initial snapshot is missing required field: asks.');
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow('Initial snapshot is missing required field: asks.');
   });
 
   it('should throw an error if initialSnapshot is missing lastUpdateId', () => {
     const invalidSnapshot = { ...initialSnapshot, lastUpdateId: undefined as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError('Initial snapshot is missing required field: lastUpdateId.');
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow('Initial snapshot is missing required field: lastUpdateId.');
   });
 
   it('should throw an error if initialSnapshot is missing timestamp', () => {
     const invalidSnapshot = { ...initialSnapshot, timestamp: undefined as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError('Initial snapshot is missing required field: timestamp.');
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow('Initial snapshot is missing required field: timestamp.');
   });
 
   it('should throw an error if bids is not an array', () => {
     const invalidSnapshot = { ...initialSnapshot, bids: {} as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError('Initial snapshot bids must be an array.');
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow('Initial snapshot bids must be an array.');
   });
 
   it('should throw an error if asks is not an array', () => {
     const invalidSnapshot = { ...initialSnapshot, asks: "not an array" as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError('Initial snapshot asks must be an array.');
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow('Initial snapshot asks must be an array.');
   });
 
   it('should throw an error if a bid entry is not an object', () => {
     const invalidSnapshot = { ...initialSnapshot, bids: [null as any] };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError('Invalid bids entry at index 0: must be an object.');
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow('Invalid bids entry at index 0: must be an object.');
   });
 
   it('should throw an error if an ask entry is missing price', () => {
     const invalidSnapshot = { ...initialSnapshot, asks: [{ quantity: new Decimal(1) }] as any };
-    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrowError(`Invalid asks entry at index 0: missing 'price' or 'quantity' field.`);
+    expect(() => new OrderBookManager(invalidSnapshot, resubscribeMock)).toThrow(`Invalid asks entry at index 0: missing 'price' or 'quantity' field.`);
   });
 
   it('should throw an error if a bid entry has non-Decimal price', () => {
