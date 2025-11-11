@@ -1,4 +1,4 @@
-import { Portfolio, Balance } from '../types/orders-portfolio';
+import { Portfolio, Balance } from '../types';
 import { Decimal } from 'decimal.js';
 
 /**
