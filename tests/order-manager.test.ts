@@ -1,5 +1,5 @@
 import { SimpleOrderManager, createInFlightOrder } from '../src/order-management/simpleOrderManager';
-import { CreateOrderRequest, OrderState } from '../src/types/orders-basic';
+import { CreateOrderRequest, OrderState } from '../src/order-management/order';
 import { ExchangeId, OrderType, TradingSide, TradingPair } from '../src/types/common';
 
 describe('SimpleOrderManager', () => {

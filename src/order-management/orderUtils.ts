@@ -16,6 +16,16 @@ export function isOrderInState(order: InFlightOrder, state: OrderState): boolean
  * @param state The order state to filter by.
  * @returns A new array containing only the orders that are in the specified state.
  */
+/**
+ * Checks if a given in-flight order matches any of the specified states.
+ * @param order The in-flight order to check.
+ * @param states An array of order states to match against.
+ * @returns True if the order's state matches any of the specified states, false otherwise.
+ */
+export function isOrderInAnyState(order: InFlightOrder, states: OrderState[]): boolean {
+  return states.includes(order.state);
+}
+
 export function filterInFlightOrdersByState(
   orders: InFlightOrder[],
   state: OrderState
