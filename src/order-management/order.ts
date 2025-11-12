@@ -394,6 +394,161 @@ export function isActiveOrderState(state: OrderState): boolean {
 }
 
 // ============================================================================
+// Type Guards
+// ============================================================================
+
+export function isTradingSide(value: any): value is TradingSide {
+  return Object.values(TradingSide).includes(value);
+}
+
+export function isOrderType(value: any): value is OrderType {
+  return Object.values(OrderType).includes(value);
+}
+
+export function isOrderState(value: any): value is OrderState {
+  return Object.values(OrderState).includes(value);
+}
+
+/**
+ * Represents a generic order response from a connector before normalization.
+ * This interface is designed to be flexible, accommodating various connector
+ * specific field names and string representations for order properties.
+ *
+ * Connectors should map their raw order data to this generic structure
+ * before passing it to the normalization helper.
+ */
+export interface ConnectorOrderResponse {
+  /** Raw string representation of the order side (e.g., "BUY", "sell", "LONG") */
+  side: string;
+  /** Raw string representation of the order type (e.g., "LIMIT", "market", "STOP") */
+  type: string;
+  /** Raw string representation of the order status (e.g., "NEW", "FILLED", "CANCELED") */
+  status: string;
+  // Add other common fields that might need normalization or are generally present
+  // For example:
+  // clientOrderId?: string;
+  // exchangeOrderId?: string;
+  // tradingPair: string;
+  // amount: string | number;
+  // price?: string | number;
+  // executedAmountBase?: string | number;
+  // executedAmountQuote?: string | number;
+  // creationTimestamp?: number;
+  // lastUpdateTimestamp?: number;
+  // fees?: any[];
+}
+
+/**
+ * Normalizes a raw connector order response into WaspBot's standardized types.
+ * This helper is crucial for ensuring consistency across different exchange
+ * integrations by converting connector-specific string values for order
+ * side, type, and status into the corresponding WaspBot enum values.
+ *
+ * @param rawResponse The raw order response object from a connector.
+ * @returns An object with normalized `side`, `type`, and `state` properties.
+ * @throws {WaspBotError} if any of the required fields (side, type, status)
+ *   cannot be normalized to a valid WaspBot enum value.
+ */
+export function normalizeOrderResponse(rawResponse: ConnectorOrderResponse): {
+  side: TradingSide;
+  type: OrderType;
+  state: OrderState;
+} {
+  const normalizedSide = normalizeTradingSide(rawResponse.side);
+  const normalizedType = normalizeOrderType(rawResponse.type);
+  const normalizedState = normalizeOrderState(rawResponse.status);
+
+  return {
+    side: normalizedSide,
+    type: normalizedType,
+    state: normalizedState,
+  };
+}
+
+/**
+ * Internal helper to normalize a string to a TradingSide enum.
+ * @param sideString The raw string from the connector.
+ * @returns The corresponding TradingSide enum value.
+ * @throws {WaspBotError} if the string cannot be normalized.
+ */
+function normalizeTradingSide(sideString: string): TradingSide {
+  const upperCaseSide = sideString.toUpperCase();
+  if (upperCaseSide === 'BUY') return TradingSide.BUY;
+  if (upperCaseSide === 'SELL') return TradingSide.SELL;
+  throw new WaspBotError(`Unknown trading side: ${sideString}`, 'UNKNOWN_TRADING_SIDE');
+}
+
+/**
+ * Internal helper to normalize a string to an OrderType enum.
+ * @param typeString The raw string from the connector.
+ * @returns The corresponding OrderType enum value.
+ * @throws {WaspBotError} if the string cannot be normalized.
+ */
+function normalizeOrderType(typeString: string): OrderType {
+  const upperCaseType = typeString.toUpperCase();
+  switch (upperCaseType) {
+    case 'LIMIT':
+      return OrderType.LIMIT;
+    case 'MARKET':
+      return OrderType.MARKET;
+    case 'LIMIT_MAKER':
+      return OrderType.LIMIT_MAKER;
+    case 'STOP_LOSS':
+      return OrderType.STOP_LOSS;
+    case 'STOP_LOSS_LIMIT':
+      return OrderType.STOP_LOSS_LIMIT;
+    case 'TAKE_PROFIT':
+      return OrderType.TAKE_PROFIT;
+    case 'TAKE_PROFIT_LIMIT':
+      return OrderType.TAKE_PROFIT_LIMIT;
+    default:
+      throw new WaspBotError(`Unknown order type: ${typeString}`, 'UNKNOWN_ORDER_TYPE');
+  }
+}
+
+/**
+ * Internal helper to normalize a string to an OrderState enum.
+ * This mapping might be more complex as connector statuses don't always
+ * directly map to WaspBot's internal OrderState.
+ * @param statusString The raw string from the connector.
+ * @returns The corresponding OrderState enum value.
+ * @throws {WaspBotError} if the string cannot be normalized.
+ */
+function normalizeOrderState(statusString: string): OrderState {
+  const upperCaseStatus = statusString.toUpperCase();
+  switch (upperCaseStatus) {
+    case 'NEW':
+    case 'PENDING_CREATE':
+      return OrderState.PENDING_CREATE;
+    case 'OPEN':
+    case 'PARTIALLY_FILLED':
+      return OrderState.OPEN; // Or PARTIALLY_FILLED if connector distinguishes
+    case 'FILLED':
+      return OrderState.FILLED;
+    case 'CANCELED':
+    case 'CANCELLED':
+    case 'EXPIRED':
+      return OrderState.CANCELED;
+    case 'REJECTED':
+    case 'FAILED':
+      return OrderState.FAILED;
+    case 'PENDING_CANCEL':
+      return OrderState.PENDING_CANCEL;
+    // DEX specific states, assuming connectors might return similar strings
+    case 'PENDING_APPROVAL':
+      return OrderState.PENDING_APPROVAL;
+    case 'APPROVED':
+      return OrderState.APPROVED;
+    case 'CREATED':
+      return OrderState.CREATED;
+    case 'COMPLETED':
+      return OrderState.COMPLETED;
+    default:
+      throw new WaspBotError(`Unknown order status: ${statusString}`, 'UNKNOWN_ORDER_STATUS');
+  }
+}
+
+// ============================================================================
 // Order Utility Functions
 // ============================================================================
 
@@ -533,6 +688,10 @@ export default {
   getValidNextStates,
   isTerminalState,
   isActiveOrderState,
+  isTradingSide,
+  isOrderType,
+  isOrderState,
+  normalizeOrderResponse,
   parseTradingPair,
   calculateOrderCompletion,
   calculateRemainingAmount,
