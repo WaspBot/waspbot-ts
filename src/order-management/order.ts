@@ -472,6 +472,7 @@ export function normalizeOrderResponse(rawResponse: ConnectorOrderResponse): {
  * @throws {WaspBotError} if the string cannot be normalized.
  */
 function normalizeTradingSide(sideString: string): TradingSide {
+  if (sideString == null || sideString.trim() === '') { throw new WaspBotError('Trading side is required', 'UNKNOWN_TRADING_SIDE'); }
   const upperCaseSide = sideString.toUpperCase();
   if (upperCaseSide === 'BUY') return TradingSide.BUY;
   if (upperCaseSide === 'SELL') return TradingSide.SELL;
@@ -485,6 +486,7 @@ function normalizeTradingSide(sideString: string): TradingSide {
  * @throws {WaspBotError} if the string cannot be normalized.
  */
 function normalizeOrderType(typeString: string): OrderType {
+  if (typeString == null || typeString.trim() === '') { throw new WaspBotError('Order type is required', 'UNKNOWN_ORDER_TYPE'); }
   const upperCaseType = typeString.toUpperCase();
   switch (upperCaseType) {
     case 'LIMIT':
@@ -515,14 +517,16 @@ function normalizeOrderType(typeString: string): OrderType {
  * @throws {WaspBotError} if the string cannot be normalized.
  */
 function normalizeOrderState(statusString: string): OrderState {
+  if (statusString == null || statusString.trim() === '') { throw new WaspBotError('Order status is required', 'UNKNOWN_ORDER_STATUS'); }
   const upperCaseStatus = statusString.toUpperCase();
   switch (upperCaseStatus) {
     case 'NEW':
     case 'PENDING_CREATE':
       return OrderState.PENDING_CREATE;
     case 'OPEN':
+      return OrderState.OPEN;
     case 'PARTIALLY_FILLED':
-      return OrderState.OPEN; // Or PARTIALLY_FILLED if connector distinguishes
+      return OrderState.PARTIALLY_FILLED;
     case 'FILLED':
       return OrderState.FILLED;
     case 'CANCELED':
