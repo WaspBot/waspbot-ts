@@ -131,9 +131,39 @@ function createInFlightOrder(req: CreateOrderRequest): InFlightOrder {
 }
 
 export class SimpleOrderManager implements OrderManager {
+  /**
+   * Stores all in-flight orders by their clientOrderId.
+   * An in-flight order is one that has been submitted to an exchange but not yet in a terminal state (filled, cancelled, failed).
+   */
   private orders: Map<string, InFlightOrder> = new Map();
 
+  /**
+   * Tracks clientOrderIds for orders that are currently being submitted or are in the process of being placed.
+   * This helps prevent duplicate order submissions.
+   */
+  private inFlightOrderIds: Set<string> = new Set();
+
+  /**
+   * Tracks clientOrderIds for orders that are currently in the process of being cancelled.
+   * This helps prevent repeated cancellation attempts for the same order.
+   */
+  private pendingCancelOrderIds: Set<string> = new Set();
+
+  /**
+   * Places a new order. Guards against duplicate submissions by checking if an order with the same clientOrderId is already in-flight.
+   * @param request The CreateOrderRequest containing order details.
+   * @returns A Promise that resolves to an OrderPlacementResult.
+   */
   async placeOrder(request: CreateOrderRequest): Promise<OrderPlacementResult> {
+    if (this.orders.has(request.clientOrderId) || this.inFlightOrderIds.has(request.clientOrderId)) {
+      return {
+        success: false,
+        clientOrderId: request.clientOrderId,
+        error: `Order with clientOrderId ${request.clientOrderId} is already in-flight or exists.`,
+        timestamp: Date.now(),
+      };
+    }
+
     try {
       validateCreateOrderRequest(request);
     } catch (error) {
@@ -151,6 +181,7 @@ export class SimpleOrderManager implements OrderManager {
 
     const inFlightOrder = new InFlightOrderImpl(request);
     this.orders.set(request.clientOrderId, inFlightOrder);
+    this.inFlightOrderIds.add(request.clientOrderId);
 
     // Simulate an immediate state update to OPEN or PENDING_CREATE
     // In a real scenario, this would come from a connector
@@ -163,7 +194,22 @@ export class SimpleOrderManager implements OrderManager {
     };
   }
 
+  /**
+   * Cancels an existing order. Guards against repeated cancellation attempts.
+   * @param clientOrderId The clientOrderId of the order to cancel.
+   * @returns A Promise that resolves to an OrderCancellationResult.
+   */
   async cancelOrder(clientOrderId: string): Promise<OrderCancellationResult> {
+    if (this.pendingCancelOrderIds.has(clientOrderId)) {
+      return {
+        success: false,
+        clientOrderId,
+        error: `Order ${clientOrderId} is already pending cancellation.`,
+        currentState: OrderState.PENDING_CANCEL,
+        timestamp: Date.now(),
+      };
+    }
+
     const order = this.orders.get(clientOrderId);
     if (!order) {
       return {
@@ -171,6 +217,16 @@ export class SimpleOrderManager implements OrderManager {
         clientOrderId,
         error: 'Order not found',
         currentState: OrderState.UNKNOWN,
+        timestamp: Date.now(),
+      };
+    }
+
+    if (isOrderInState(order, [OrderState.PENDING_CANCEL])) {
+      return {
+        success: false,
+        clientOrderId,
+        error: `Order ${clientOrderId} is already in a pending cancellation state.`,
+        currentState: order.state,
         timestamp: Date.now(),
       };
     }
@@ -185,8 +241,9 @@ export class SimpleOrderManager implements OrderManager {
       };
     }
 
-    // Simulate cancellation
+    // Mark order as pending cancellation
     order.updateState(OrderState.PENDING_CANCEL);
+    this.pendingCancelOrderIds.add(clientOrderId);
     // In a real scenario, a connector would confirm cancellation and call processOrderUpdate
     order.updateState(OrderState.CANCELLED);
 
@@ -198,6 +255,10 @@ export class SimpleOrderManager implements OrderManager {
     };
   }
 
+  /**
+   * Processes an order update, updating the order's state and stopping tracking if the order reaches a terminal state.
+   * @param update The order update object, expected to contain clientOrderId and newState.
+   */
   async processOrderUpdate(update: any): Promise<void> {
     const order = this.orders.get(update.clientOrderId);
     if (order) {
@@ -208,8 +269,15 @@ export class SimpleOrderManager implements OrderManager {
     }
   }
 
+  /**
+   * Stops tracking an order, removing it from all internal tracking maps and sets.
+   * This should be called when an order reaches a final, terminal state (filled, cancelled, failed).
+   * @param clientOrderId The clientOrderId of the order to stop tracking.
+   */
   async stopTracking(clientOrderId: string): Promise<void> {
     this.orders.delete(clientOrderId);
+    this.inFlightOrderIds.delete(clientOrderId);
+    this.pendingCancelOrderIds.delete(clientOrderId);
   }
 
   // ...implement other OrderManager methods as needed with stubs or logic
