@@ -112,9 +112,13 @@ export class KuCoinConnector extends BaseConnector {
    */
   constructor(config: ConnectorConfig) {
     super(config);
-    this.httpClient = new HttpClient(this.logger);
+    this.httpClient = new HttpClient({
+      baseURL: 'https://api.kucoin.com',
+      timeout: 5000, // 5 seconds
+      headers: {},
+    });
     this.symbolAdapter = new KuCoinSymbolAdapter(this.logger, this.httpClient);
-    this.initialize();
+    // Initialization will be handled in the connect method
   }
 
   private async initialize(): Promise<void> {
