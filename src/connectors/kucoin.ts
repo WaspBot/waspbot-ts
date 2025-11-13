@@ -1,4 +1,6 @@
 import { BaseConnector, ConnectorConfig } from './base-connector.js';
+import { HttpClient } from '../utils/http-client.js';
+import { Logger } from '../core/logger.js';
 
 interface SymbolPrecision {
   lotSize: number; // Minimum order quantity step
@@ -10,12 +12,32 @@ interface SymbolPrecision {
  */
 class KuCoinSymbolAdapter {
   private symbolPrecisions: Map<string, SymbolPrecision> = new Map();
+  private httpClient: HttpClient;
+  private logger: Logger;
 
-  constructor() {
-    // TODO: Populate this from KuCoin exchange info API
-    // Placeholder data for demonstration
-    this.symbolPrecisions.set('BTC/USDT', { lotSize: 0.00000001, tickSize: 0.01 });
-    this.symbolPrecisions.set('ETH/USDT', { lotSize: 0.00000001, tickSize: 0.00001 });
+  constructor(logger: Logger, httpClient: HttpClient) {
+    this.logger = logger;
+    this.httpClient = httpClient;
+  }
+
+  async init(): Promise<void> {
+    try {
+      const response = await this.httpClient.get('https://api.kucoin.com/api/v2/symbols');
+      if (response && response.data && Array.isArray(response.data)) {
+        response.data.forEach((symbolInfo: any) => {
+          const internalSymbol = this.fromExchangeSymbol(symbolInfo.symbol);
+          this.symbolPrecisions.set(internalSymbol, {
+            lotSize: parseFloat(symbolInfo.baseIncrement),
+            tickSize: parseFloat(symbolInfo.priceIncrement),
+          });
+        });
+        this.logger.info('KuCoin symbol precisions loaded successfully.');
+      } else {
+        this.logger.error('Failed to load KuCoin symbol precisions: Invalid API response.');
+      }
+    } catch (error: any) {
+      this.logger.error(`Failed to load KuCoin symbol precisions: ${error.message}`);
+    }
   }
 
   /**
@@ -24,7 +46,7 @@ class KuCoinSymbolAdapter {
    * @returns The KuCoin-specific symbol.
    */
   toExchangeSymbol(internalSymbol: string): string {
-    return internalSymbol.replace('/', '-');
+    return internalSymbol.replaceAll('/', '-');
   }
 
   /**
@@ -33,7 +55,7 @@ class KuCoinSymbolAdapter {
    * @returns The internal symbol.
    */
   fromExchangeSymbol(exchangeSymbol: string): string {
-    return exchangeSymbol.replace('-', '/');
+    return exchangeSymbol.replaceAll('-', '/');
   }
 
   /**
@@ -43,13 +65,18 @@ class KuCoinSymbolAdapter {
    * @returns The formatted quantity.
    */
   formatQuantity(internalSymbol: string, quantity: number): number {
+    if (isNaN(quantity) || !isFinite(quantity) || quantity < 0) {
+      this.logger.warn(`Invalid quantity provided for ${internalSymbol}: ${quantity}. Returning 0.`);
+      return 0;
+    }
+
     const precision = this.symbolPrecisions.get(internalSymbol);
-    if (!precision) {
-      console.warn(`No lot size precision found for ${internalSymbol}. Returning original quantity.`);
+    if (!precision || precision.lotSize <= 0) {
+      this.logger.warn(`No valid lot size precision found for ${internalSymbol}. Returning original quantity.`);
       return quantity;
     }
     const multiplier = 1 / precision.lotSize;
-    return Math.floor(quantity * multiplier) / multiplier;
+    return Math.round(quantity * multiplier) / multiplier;
   }
 
   /**
@@ -77,6 +104,7 @@ class KuCoinSymbolAdapter {
  */
 export class KuCoinConnector extends BaseConnector {
   private symbolAdapter: KuCoinSymbolAdapter;
+  private httpClient: HttpClient;
 
   /**
    * Creates an instance of KuCoinConnector.
@@ -84,8 +112,13 @@ export class KuCoinConnector extends BaseConnector {
    */
   constructor(config: ConnectorConfig) {
     super(config);
-    this.symbolAdapter = new KuCoinSymbolAdapter();
-    // Additional KuCoin-specific initialization can go here
+    this.httpClient = new HttpClient(this.logger);
+    this.symbolAdapter = new KuCoinSymbolAdapter(this.logger, this.httpClient);
+    this.initialize();
+  }
+
+  private async initialize(): Promise<void> {
+    await this.symbolAdapter.init();
   }
 
   // TODO: Implement abstract methods from BaseConnector
