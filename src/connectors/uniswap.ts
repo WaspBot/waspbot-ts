@@ -41,6 +41,17 @@ export class UniswapConnector {
     slippageTolerance: number = 0.5, // 0.5%
     transactionDeadline: number = 20 // 20 minutes
   ): Promise<void> {
+    // Input validation
+    if (typeof amountIn !== 'number' || !Number.isFinite(amountIn) || amountIn <= 0) {
+      throw new Error('Invalid amountIn: Must be a positive, finite number.');
+    }
+    if (typeof slippageTolerance !== 'number' || !Number.isFinite(slippageTolerance) || slippageTolerance < 0 || slippageTolerance > 100) {
+      throw new Error('Invalid slippageTolerance: Must be a finite number between 0 and 100 (inclusive).');
+    }
+    if (typeof transactionDeadline !== 'number' || !Number.isFinite(transactionDeadline) || transactionDeadline <= 0) {
+      throw new Error('Invalid transactionDeadline: Must be a positive, finite number.');
+    }
+
     Logger.info(
       `UniswapConnector: Executing swap from ${amountIn} ${tokenIn} to ${tokenOut} with ` +
         `slippage tolerance of ${slippageTolerance}% and a transaction deadline of ${transactionDeadline} minutes.`
