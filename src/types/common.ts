@@ -109,6 +109,16 @@ export enum TimeInForce {
 }
 
 /**
+ * Defines the action a position can take.
+ */
+export enum PositionAction {
+  OPEN = 'OPEN',
+  CLOSE = 'CLOSE',
+  REDUCE = 'REDUCE',
+  INCREASE = 'INCREASE',
+}
+
+/**
  * Defines the possible statuses of a connector.
  */
 export enum ConnectorStatus {
