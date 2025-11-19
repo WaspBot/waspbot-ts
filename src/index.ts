@@ -53,7 +53,7 @@ export const VERSION = '0.1.0';
 /**
  * Initializes WaspBot with default or provided configuration.
  * @param options - Optional configuration options.
- * @param options.requiredKeys - An array of additional or alternative required configuration keys.
+ * @param options.requiredKeys - An array of additional required configuration keys.
  * @returns The loaded application configuration.
  * @throws {ConfigError} If essential configuration keys are missing or the config file cannot be loaded/parsed.
  * @breakingChange This function now returns `AppConfig` and accepts an optional `options` object.
