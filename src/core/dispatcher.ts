@@ -158,6 +158,8 @@ class EventQueue {
     totalDropped: 0,
   };
 
+  private updateMetrics(): void { /* no-op */ }
+
   constructor(config: EventQueueConfig) {
     this.config = config;
   }
