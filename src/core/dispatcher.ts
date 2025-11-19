@@ -700,6 +700,11 @@ export class EventDispatcher extends EventEmitter {
       this.handlerToListenerMap.set(eventType, new Map());
     }
 
+    // Short-circuit if the handler is already registered for this eventType
+    if (this.handlerToListenerMap.get(eventType)!.has(handler)) {
+      return;
+    }
+
     const listener = createEventListener(`event-${eventType}-handler`, handler);
     this.listenerRegistry.get(eventType)!.add(listener);
     this.handlerToListenerMap.get(eventType)!.set(handler, listener);
