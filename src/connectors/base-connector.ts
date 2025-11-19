@@ -7,7 +7,22 @@
  */
 
 import { EventEmitter } from 'events';
-import { HealthStatus, ValidationResult } from '../types/common';
+import { 
+  HealthStatus, 
+  ValidationResult, 
+  ExchangeId, 
+  DecimalAmount, 
+  TradingPair, 
+  TradingSide, 
+  OrderType, 
+  Price, 
+  Quantity, 
+  TimeInForce, 
+  ConnectorStatus, 
+  ConnectorError, 
+  Timestamp, 
+  OrderId 
+} from '../types/common';
 import { Ticker, Trade, TradingPairInfo } from '../market-data/ticker';
 import { OrderBook } from '../market-data/order-book';
 import { Order } from '../order-management/order';
