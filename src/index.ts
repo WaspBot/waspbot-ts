@@ -83,7 +83,7 @@ export function initialize(options?: { requiredKeys?: string[] }): AppConfig {
     } else {
       Logger.error(`An unexpected error occurred during initialization: ${error.message}`);
     }
-    process.exit(1);
+    throw error;
   }
 
   return config;
