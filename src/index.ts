@@ -44,13 +44,29 @@ export * from './utils/http-client';
 export * from './utils/ws-client';
 export * from './utils/math';
 
+import { Logger } from './core/logger';
+import { loadConfig, AppConfig } from './utils/config';
+
 // Version information
 export const VERSION = '0.1.0';
 
 /**
  * Initialize WaspBot with default configuration
  */
-export function initialize(): void {
+export function initialize(): AppConfig {
   // eslint-disable-next-line no-console
   console.log(`🐝 WaspBot-TS v${VERSION} initialized`);
+
+  const requiredConfigKeys = [
+    'NODE_ENV',
+    'API_KEY',
+    'API_SECRET',
+    // Add other essential configuration keys here
+  ];
+
+  const config = loadConfig('config.json', requiredConfigKeys);
+  Logger.info('Configuration loaded successfully.');
+  // Logger.debug('Loaded config:', config); // Uncomment for debugging
+
+  return config;
 }
