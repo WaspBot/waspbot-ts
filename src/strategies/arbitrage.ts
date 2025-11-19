@@ -27,6 +27,7 @@ import {
   StrategyStatus,
   StrategyError,
 } from '../types/common';
+import { Ticker } from '../market-data/ticker';
 import { clamp, safeDivide } from '../utils/math';
 
 /**

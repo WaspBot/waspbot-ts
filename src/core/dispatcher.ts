@@ -1,12 +1,8 @@
-/**
- * @fileoverview Core EventDispatcher class for WaspBot-TS
- * Implements subscription management, emit methods, and priority queue support
- */
-
 import { EventEmitter } from 'events';
 import { EventListener } from './listener.js';
 import { BaseEvent, EventPriority } from './events.js';
 import { clamp } from '../utils/math.js';
+import { QueueMetrics, QueueProcessingState } from '../types';
 
 // ============================================================================
 // Event Filtering and Routing Types
@@ -117,6 +113,26 @@ export interface EventBatch {
 // ============================================================================
 
 /**
+ * Strategy for handling queue overflow
+ */
+export enum QueueOverflowStrategy {
+  DROP_INCOMING = 'drop_incoming',
+  DROP_OLDEST = 'drop_oldest',
+  DROP_LOWEST_PRIORITY = 'drop_lowest_priority',
+  REJECT = 'reject',
+  BLOCK = 'block',
+}
+
+/**
+ * Configuration for the EventQueue
+ */
+export interface EventQueueConfig {
+  maxSize: number;
+  overflowStrategy: QueueOverflowStrategy;
+  batchConfig: BatchConfig;
+}
+
+/**
  * Event queue item with priority support
  */
 interface QueuedEvent {
@@ -134,8 +150,17 @@ class EventQueue {
   private batchBuffer: QueuedEvent[] = [];
   private batchTimer: NodeJS.Timeout | null = null;
   private batchCounter = 0;
+  private config: EventQueueConfig;
+  private metrics: QueueMetrics = {
+    totalProcessed: 0,
+    totalFailed: 0,
+    averageProcessingTime: 0,
+    totalDropped: 0,
+  };
 
-  constructor(private readonly batchConfig: BatchConfig) {}
+  constructor(config: EventQueueConfig) {
+    this.config = config;
+  }
 
   /**
    * Add event to queue with automatic priority sorting
@@ -183,7 +208,7 @@ class EventQueue {
     switch (this.config.overflowStrategy) {
       case QueueOverflowStrategy.DROP_INCOMING: {
         this.metrics.totalDropped++;
-        this.updateMetrics();
+        // this.updateMetrics(); // updateMetrics is called at the end of enqueue
         return false;
       }
 
@@ -191,7 +216,7 @@ class EventQueue {
         this.queue.shift(); // Remove oldest
         this.insertByPriority(newEvent);
         this.metrics.totalDropped++;
-        this.updateMetrics();
+        // this.updateMetrics();
         return true;
       }
 
@@ -202,11 +227,11 @@ class EventQueue {
           // Insert directly to avoid re-entering overflow handling
           this.insertByPriority(newEvent);
           this.metrics.totalDropped++;
-          this.updateMetrics();
+          // this.updateMetrics();
           return true;
         }
         this.metrics.totalDropped++;
-        this.updateMetrics();
+        // this.updateMetrics();
         return false;
       }
 
@@ -218,13 +243,13 @@ class EventQueue {
         // In a real implementation, this would block until space is available
         // For now, we'll just drop the event
         this.metrics.totalDropped++;
-        this.updateMetrics();
+        // this.updateMetrics();
         return false;
       }
 
       default: {
         this.metrics.totalDropped++;
-        this.updateMetrics();
+        // this.updateMetrics();
         return false;
       }
     }
@@ -245,7 +270,7 @@ class EventQueue {
    * Dequeue multiple raw queued events for batch processing
    * Note: Prefer using dequeueBatch() which returns an EventBatch.
    */
-  public dequeueQueuedEvents(maxSize: number = this.batchConfig.maxBatchSize): QueuedEvent[] {
+  public dequeueQueuedEvents(maxSize: number = this.config.batchConfig.maxBatchSize): QueuedEvent[] {
     const batch: QueuedEvent[] = [];
     const actualSize = clamp(maxSize, 0, this.queue.length);
 
@@ -342,7 +367,7 @@ class EventQueue {
       return undefined;
     }
 
-    const batchSize = clamp(this.batchConfig.maxBatchSize, 0, this.queue.length);
+    const batchSize = clamp(this.config.batchConfig.maxBatchSize, 0, this.queue.length);
     const events = this.queue.splice(0, batchSize).map(qe => qe.event);
 
     return this.createEventBatch(events);
@@ -361,7 +386,7 @@ class EventQueue {
    * Check if batch should be processed
    */
   private shouldProcessBatch(): boolean {
-    return this.batchBuffer.length >= this.batchConfig.maxBatchSize;
+    return this.batchBuffer.length >= this.config.batchConfig.maxBatchSize;
   }
 
   /**
@@ -371,7 +396,7 @@ class EventQueue {
     this.batchTimer = setTimeout(() => {
       this.processBatchBuffer();
       this.batchTimer = null;
-    }, this.batchConfig.maxBatchDelay);
+    }, this.config.batchConfig.maxBatchDelay);
   }
 
   /**
@@ -384,7 +409,7 @@ class EventQueue {
     this.batchBuffer.sort((a, b) => b.priority - a.priority);
 
     // Compress similar events if enabled
-    const eventsToProcess = this.batchConfig.enableCompression
+    const eventsToProcess = this.config.batchConfig.enableCompression
       ? this.compressEvents(this.batchBuffer)
       : this.batchBuffer;
 
@@ -460,7 +485,7 @@ class EventQueue {
       id: `batch_${++this.batchCounter}`,
       events,
       createdAt: Date.now(),
-      strategy: this.batchConfig.strategy,
+      strategy: this.config.batchConfig.strategy,
       metadata: {
         totalEvents: events.length,
         priorityDistribution,
@@ -470,32 +495,29 @@ class EventQueue {
   }
 
   public recordProcessingSuccess(processingTime: number): void {
-    // Placeholder implementation for recording processing success
-    console.log(`Processing succeeded in ${processingTime}ms`);
+    this.metrics.totalProcessed++;
+    this.metrics.averageProcessingTime = (this.metrics.averageProcessingTime * (this.metrics.totalProcessed - 1) + processingTime) / this.metrics.totalProcessed;
   }
 
   public recordProcessingFailure(): void {
-    // Placeholder implementation for recording processing failure
-    console.error(`Processing failed`);
+    this.metrics.totalFailed++;
   }
 
   public isBackpressureActive(): boolean {
-    // Placeholder implementation for backpressure check
-    return this.queue.length > this.batchConfig.maxBatchSize;
+    return this.queue.length > this.config.batchConfig.maxBatchSize;
   }
 
   public getMetrics(): QueueMetrics {
-    // Placeholder implementation for retrieving queue metrics
-    return {
-      totalProcessed: 0,
-      totalFailed: 0,
-      averageProcessingTime: 0,
-    };
+    return { ...this.metrics };
   }
 
   public resetMetrics(): void {
-    // Placeholder implementation for resetting metrics
-    console.log(`Metrics reset`);
+    this.metrics = {
+      totalProcessed: 0,
+      totalFailed: 0,
+      averageProcessingTime: 0,
+      totalDropped: 0,
+    };
   }
 
   public setProcessingState(state: QueueProcessingState): void {
@@ -520,6 +542,8 @@ export interface EventDispatcherConfig {
   maxProcessingTime?: number;
   /** Batch processing configuration */
   batch?: BatchConfig;
+  /** Queue overflow strategy */
+  overflowStrategy?: QueueOverflowStrategy;
 }
 
 /**
@@ -541,6 +565,7 @@ const DEFAULT_CONFIG: Required<EventDispatcherConfig> = {
   enableAsync: true,
   maxProcessingTime: 5000,
   batch: DEFAULT_BATCH_CONFIG,
+  overflowStrategy: QueueOverflowStrategy.DROP_INCOMING,
 };
 
 // ============================================================================
@@ -634,7 +659,12 @@ export class EventDispatcher extends EventEmitter {
   ) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.eventQueue = new EventQueue(this.config.batch);
+    const eventQueueConfig: EventQueueConfig = {
+      maxSize: this.config.maxQueueSize,
+      overflowStrategy: this.config.overflowStrategy,
+      batchConfig: this.config.batch,
+    };
+    this.eventQueue = new EventQueue(eventQueueConfig);
     this.eventStorage = eventStorage || new InMemoryEventStorage();
     this.enablePersistence = enablePersistence;
   }
@@ -1354,16 +1384,10 @@ export class EventDispatcher extends EventEmitter {
     this.eventQueue.resetMetrics();
   }
 
-  /**
-   * Pause queue processing
-   */
   public pauseProcessing(): void {
     this.eventQueue.setProcessingState(QueueProcessingState.PAUSED);
   }
 
-  /**
-   * Resume queue processing
-   */
   public async resumeProcessing(): Promise<void> {
     this.eventQueue.setProcessingState(QueueProcessingState.IDLE);
     if (!this.processing && !this.eventQueue.isEmpty()) {
@@ -1371,31 +1395,19 @@ export class EventDispatcher extends EventEmitter {
     }
   }
 
-  /**
-   * Drain the queue (process all pending events)
-   */
   public async drainQueue(): Promise<void> {
     this.eventQueue.setProcessingState(QueueProcessingState.DRAINING);
     await this.processQueue();
   }
 
-  /**
-   * Clear all pending events from queue
-   */
   public clearQueue(): void {
     this.eventQueue.clear();
   }
 
-  /**
-   * Clear all listeners
-   */
   public clearAllListeners(): void {
     this.listenerRegistry.clear();
   }
 
-  /**
-   * Get dispatcher status
-   */
   public getStatus(): {
     name: string;
     listenerCount: number;
