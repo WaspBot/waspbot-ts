@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { EventListener } from './listener.js';
+import { EventListener, AnyEventCallback, createEventListener } from './listener.js';
 import { BaseEvent, EventPriority } from './events.js';
 import { clamp } from '../utils/math.js';
 import { QueueMetrics, QueueProcessingState } from '../types';
@@ -637,6 +637,7 @@ export function deserializeEvent(json: string): BaseEvent {
  */
 export class EventDispatcher extends EventEmitter {
   private readonly listenerRegistry = new Map<string, Set<EventListener>>();
+  private readonly handlerToListenerMap = new Map<string, Map<AnyEventCallback, EventListener>>();
   private readonly config: Required<EventDispatcherConfig>;
   private readonly eventQueue: EventQueue;
   private processing = false;
@@ -693,12 +694,20 @@ export class EventDispatcher extends EventEmitter {
   /**
    * Subscribe a listener to specific event types
    */
-  public subscribe(eventType: string, listener: EventListener): void {
+  public subscribe(eventType: string, handler: AnyEventCallback): void {
     if (!this.listenerRegistry.has(eventType)) {
       this.listenerRegistry.set(eventType, new Set());
+      this.handlerToListenerMap.set(eventType, new Map());
     }
 
+    // Short-circuit if the handler is already registered for this eventType
+    if (this.handlerToListenerMap.get(eventType)!.has(handler)) {
+      return;
+    }
+
+    const listener = createEventListener(`event-${eventType}-handler`, handler);
     this.listenerRegistry.get(eventType)!.add(listener);
+    this.handlerToListenerMap.get(eventType)!.set(handler, listener);
     super.emit('listenerAdded', eventType, listener);
   }
 
@@ -735,7 +744,13 @@ export class EventDispatcher extends EventEmitter {
   /**
    * Subscribe to multiple event types at once
    */
-  public subscribeToMultiple(eventTypes: string[], listener: EventListener): void {
+  public once(eventType: string, handler: AnyEventCallback): void {
+    const onceHandler: AnyEventCallback = async (event) => {
+      await handler(event);
+      this.unsubscribe(eventType, onceHandler);
+    };
+    this.subscribe(eventType, onceHandler);
+  }
     for (const eventType of eventTypes) {
       this.subscribe(eventType, listener);
     }
@@ -744,14 +759,21 @@ export class EventDispatcher extends EventEmitter {
   /**
    * Unsubscribe a listener from specific event types
    */
-  public unsubscribe(eventType: string, listener: EventListener): void {
+  public unsubscribe(eventType: string, handler: AnyEventCallback): void {
     const listeners = this.listenerRegistry.get(eventType);
-    if (listeners) {
-      listeners.delete(listener);
-      if (listeners.size === 0) {
-        this.listenerRegistry.delete(eventType);
+    const handlerMap = this.handlerToListenerMap.get(eventType);
+
+    if (listeners && handlerMap) {
+      const listenerToRemove = handlerMap.get(handler);
+      if (listenerToRemove) {
+        listeners.delete(listenerToRemove);
+        handlerMap.delete(handler);
+        if (listeners.size === 0) {
+          this.listenerRegistry.delete(eventType);
+          this.handlerToListenerMap.delete(eventType);
+        }
+        super.emit('listenerRemoved', eventType, listenerToRemove);
       }
-      super.emit('listenerRemoved', eventType, listener);
     }
   }
 
