@@ -44,13 +44,47 @@ export * from './utils/http-client';
 export * from './utils/ws-client';
 export * from './utils/math';
 
+import { Logger } from './core/logger';
+import { loadConfig, AppConfig, ConfigError } from './utils/config';
+
 // Version information
 export const VERSION = '0.1.0';
 
 /**
- * Initialize WaspBot with default configuration
+ * Initializes WaspBot with default or provided configuration.
+ * @param options - Optional configuration options.
+ * @param options.requiredKeys - An array of additional required configuration keys.
+ * @returns The loaded application configuration.
+ * @throws {ConfigError} If essential configuration keys are missing or the config file cannot be loaded/parsed.
+ * @breakingChange This function now returns `AppConfig` and accepts an optional `options` object.
  */
-export function initialize(): void {
+export function initialize(options?: { requiredKeys?: string[] }): AppConfig {
   // eslint-disable-next-line no-console
   console.log(`🐝 WaspBot-TS v${VERSION} initialized`);
+
+  const defaultRequiredConfigKeys = [
+    'NODE_ENV',
+    'API_KEY',
+    'API_SECRET',
+    // Add other essential configuration keys here
+  ];
+
+  const mergedRequiredKeys = options?.requiredKeys
+    ? [...new Set([...defaultRequiredConfigKeys, ...options.requiredKeys])]
+    : defaultRequiredConfigKeys;
+
+  let config: AppConfig;
+  try {
+    config = loadConfig('config.json', mergedRequiredKeys);
+    Logger.info('Configuration loaded successfully.');
+  } catch (error: any) {
+    if (error instanceof ConfigError) {
+      Logger.error(`Initialization failed: ${error.message}`);
+    } else {
+      Logger.error(`An unexpected error occurred during initialization: ${error.message}`);
+    }
+    throw error;
+  }
+
+  return config;
 }
