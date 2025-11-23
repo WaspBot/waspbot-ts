@@ -125,7 +125,7 @@ class InFlightOrderImpl implements InFlightOrder {
   }
 }
 
-function createInFlightOrder(req: CreateOrderRequest): InFlightOrder {
+export function createInFlightOrder(req: CreateOrderRequest): InFlightOrder {
   return new InFlightOrderImpl(req);
 }
 

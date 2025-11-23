@@ -788,22 +788,11 @@ export class EventDispatcher extends EventEmitter {
     return false;
   }
 
-  /**
-   * Unsubscribe from multiple event types at once
-   */
-  public unsubscribeFromMultiple(eventTypes: string[], listener: EventListener): void {
-    for (const eventType of eventTypes) {
-      this.unsubscribe(eventType, listener);
-    }
-  }
-
-  /**
-   * Unsubscribe a listener from all event types
-   */
-  public unsubscribeFromAll(listener: EventListener): void {
-    for (const [eventType, listeners] of this.listenerRegistry) {
-      if (listeners.has(listener)) {
-        this.unsubscribe(eventType, listener);
+  public unsubscribeFromAll(handler: AnyEventCallback): void {
+    const subscriptionsForHandler = this.handlerToListenerMap.get(handler);
+    if (subscriptionsForHandler) {
+      for (const subscription of Array.from(subscriptionsForHandler)) { // Iterate over a copy to allow modification
+        this.unsubscribe(subscription.pattern, handler);
       }
     }
   }
@@ -811,13 +800,19 @@ export class EventDispatcher extends EventEmitter {
   /**
    * Unsubscribe from multiple event types at once
    */
-  public unsubscribeFromMultiple(patterns: string[], listener: EventListener): void {
-    for (const pattern of patterns) {
-      for (const subscription of this.listenerRegistry) {
-        if (subscription.listener === listener && subscription.pattern === pattern) {
-          this.unsubscribe(pattern, subscription.handler);
-          // Assuming a listener can only be subscribed once to a specific pattern
-          break;
+  public unsubscribeFromMultiple(patterns: string[], handler: AnyEventCallback): void {
+    const subscriptionsForHandler = this.handlerToListenerMap.get(handler);
+    if (subscriptionsForHandler) {
+      for (const pattern of patterns) {
+        let subscriptionToRemove: PatternSubscription | undefined;
+        for (const subscription of subscriptionsForHandler) {
+          if (subscription.pattern === pattern) {
+            subscriptionToRemove = subscription;
+            break;
+          }
+        }
+        if (subscriptionToRemove) {
+          this.unsubscribe(pattern, handler);
         }
       }
     }
