@@ -1,4 +1,4 @@
-import { InFlightOrder, OrderState } from '../src/types/orders-basic';
+import { InFlightOrder, OrderState } from '../src/order-management/order';
 import { isOrderInState, filterInFlightOrdersByState } from '../src/order-management/orderUtils';
 
 describe('orderUtils', () => {

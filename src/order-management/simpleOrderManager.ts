@@ -6,9 +6,9 @@ import {
 import {
   CreateOrderRequest,
   OrderState,
-  validateCreateOrderRequest,
   InFlightOrder,
-} from '../types/orders-basic';
+} from './order';
+import { validateCreateOrderRequest } from './orderUtils';
 import {
   WaspBotError,
   ExchangeId,
@@ -126,7 +126,7 @@ class InFlightOrderImpl implements InFlightOrder {
   }
 }
 
-function createInFlightOrder(req: CreateOrderRequest): InFlightOrder {
+export function createInFlightOrder(req: CreateOrderRequest): InFlightOrder {
   return new InFlightOrderImpl(req);
 }
 

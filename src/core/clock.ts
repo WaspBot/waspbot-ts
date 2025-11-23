@@ -4,8 +4,8 @@
  */
 
 import { DateTime } from 'luxon';
-import { EventDispatcher } from './dispatcher.js';
-import { BaseEvent, TimestampedEvent, EventPriority, EventStatus } from './events.js';
+import { EventDispatcher } from './dispatcher';
+import { BaseEvent, TimestampedEvent, EventPriority, EventStatus } from './events';
 
 export interface TickEvent extends TimestampedEvent {
   readonly type: 'CLOCK_TICK';

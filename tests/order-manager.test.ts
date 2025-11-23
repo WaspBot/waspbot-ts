@@ -1,5 +1,6 @@
 import { SimpleOrderManager, createInFlightOrder } from '../src/order-management/simpleOrderManager';
 import { CreateOrderRequest, OrderState } from '../src/order-management/order';
+import { Decimal } from 'decimal.js';
 import { ExchangeId, OrderType, TradingSide, TradingPair } from '../src/types/common';
 
 describe('SimpleOrderManager', () => {
@@ -14,8 +15,8 @@ describe('SimpleOrderManager', () => {
     clientOrderId: 'test-order-123',
     side: TradingSide.BUY,
     orderType: OrderType.LIMIT,
-    price: 50000,
-    amount: 0.001,
+    price: new Decimal(50000),
+    amount: new Decimal(0.001),
   };
 
   describe('placeOrder', () => {
@@ -30,7 +31,7 @@ describe('SimpleOrderManager', () => {
     });
 
     it('should return an error for invalid order requests', async () => {
-      const invalidRequest = { ...mockCreateOrderRequest, quantity: 0 }; // Invalid quantity
+      const invalidRequest = { ...mockCreateOrderRequest, amount: new Decimal(0) }; // Invalid amount (must be greater than 0)
       const result = await orderManager.placeOrder(invalidRequest);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();

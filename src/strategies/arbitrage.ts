@@ -16,7 +16,7 @@
 import { EventEmitter } from 'node:events';
 import Decimal from 'decimal.js';
 import { BaseConnector } from '../connectors/base-connector.js';
-import { Logger } from '../core/logger.js';
+import { Logger } from '../core/logger';
 import {
   TradingPair,
   ExchangeId,
