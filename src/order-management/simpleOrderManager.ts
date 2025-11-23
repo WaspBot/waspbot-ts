@@ -6,6 +6,7 @@ import {
 import {
   CreateOrderRequest,
   OrderState,
+  InFlightOrder,
 } from './order';
 import { validateCreateOrderRequest } from './orderUtils';
 import {

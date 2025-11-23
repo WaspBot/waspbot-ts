@@ -1,6 +1,6 @@
 
 import { EventDispatcher } from '../src/core/dispatcher';
-import { BaseEvent, EventPriority } from '../src/core/events';
+import { BaseEvent, EventPriority, EventStatus } from '../src/core/events';
 
 describe('EventDispatcher Wildcard Subscriptions', () => {
   let dispatcher: EventDispatcher;
@@ -18,7 +18,7 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
     const handler = jest.fn();
     dispatcher.subscribe('test.event', handler);
 
-    const event: BaseEvent = { id: '1', type: 'test.event', priority: EventPriority.NORMAL };
+    const event: BaseEvent = { id: '1', type: 'test.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(event);
 
     expect(handler).toHaveBeenCalledWith(event);
@@ -29,13 +29,13 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
     const handler = jest.fn();
     dispatcher.subscribe('trade.*', handler);
 
-    const tradeUpdateEvent: BaseEvent = { id: '2', type: 'trade.update', priority: EventPriority.NORMAL };
+    const tradeUpdateEvent: BaseEvent = { id: '2', type: 'trade.update', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(tradeUpdateEvent);
 
-    const tradeExecuteEvent: BaseEvent = { id: '3', type: 'trade.execute', priority: EventPriority.NORMAL };
+    const tradeExecuteEvent: BaseEvent = { id: '3', type: 'trade.execute', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(tradeExecuteEvent);
 
-    const orderUpdateEvent: BaseEvent = { id: '4', type: 'order.update', priority: EventPriority.NORMAL };
+    const orderUpdateEvent: BaseEvent = { id: '4', type: 'order.update', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(orderUpdateEvent); // Should not be called
 
     expect(handler).toHaveBeenCalledWith(tradeUpdateEvent);
@@ -47,10 +47,10 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
     const handler = jest.fn();
     dispatcher.subscribe('*', handler);
 
-    const event1: BaseEvent = { id: '5', type: 'any.event.type', priority: EventPriority.NORMAL };
+    const event1: BaseEvent = { id: '5', type: 'any.event.type', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(event1);
 
-    const event2: BaseEvent = { id: '6', type: 'another.event', priority: EventPriority.NORMAL };
+    const event2: BaseEvent = { id: '6', type: 'another.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(event2);
 
     expect(handler).toHaveBeenCalledWith(event1);
@@ -65,10 +65,10 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
     dispatcher.subscribe('market.price', exactHandler);
     dispatcher.subscribe('market.*', wildcardHandler);
 
-    const priceEvent: BaseEvent = { id: '7', type: 'market.price', priority: EventPriority.NORMAL };
+    const priceEvent: BaseEvent = { id: '7', type: 'market.price', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(priceEvent);
 
-    const volumeEvent: BaseEvent = { id: '8', type: 'market.volume', priority: EventPriority.NORMAL };
+    const volumeEvent: BaseEvent = { id: '8', type: 'market.volume', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(volumeEvent);
 
     expect(exactHandler).toHaveBeenCalledWith(priceEvent);
@@ -83,7 +83,7 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
     const handler = jest.fn();
     dispatcher.subscribe('trade.*', handler);
 
-    const nonMatchingEvent: BaseEvent = { id: '9', type: 'order.created', priority: EventPriority.NORMAL };
+    const nonMatchingEvent: BaseEvent = { id: '9', type: 'order.created', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(nonMatchingEvent);
 
     expect(handler).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
     dispatcher.subscribe('test.event', handler);
     dispatcher.unsubscribe('test.event', handler);
 
-    const event: BaseEvent = { id: '10', type: 'test.event', priority: EventPriority.NORMAL };
+    const event: BaseEvent = { id: '10', type: 'test.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(event);
 
     expect(handler).not.toHaveBeenCalled();
@@ -105,7 +105,7 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
     dispatcher.subscribe('trade.*', handler);
     dispatcher.unsubscribe('trade.*', handler);
 
-    const tradeUpdateEvent: BaseEvent = { id: '11', type: 'trade.update', priority: EventPriority.NORMAL };
+    const tradeUpdateEvent: BaseEvent = { id: '11', type: 'trade.update', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(tradeUpdateEvent);
 
     expect(handler).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
     dispatcher.subscribe('data.*', handler1);
     dispatcher.subscribe('data.*', handler2);
 
-    const dataEvent: BaseEvent = { id: '12', type: 'data.new', priority: EventPriority.NORMAL };
+    const dataEvent: BaseEvent = { id: '12', type: 'data.new', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
     await dispatcher.emitEvent(dataEvent);
 
     expect(handler1).toHaveBeenCalledWith(dataEvent);
@@ -159,9 +159,9 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
 
     dispatcher.unsubscribeFromMultiple(['event.one', 'event.three'], handler1); // This will only unsubscribe handler1 from event.one
 
-    const event1: BaseEvent = { id: '13', type: 'event.one', priority: EventPriority.NORMAL };
-    const event2: BaseEvent = { id: '14', type: 'event.two', priority: EventPriority.NORMAL };
-    const event3: BaseEvent = { id: '15', type: 'event.three', priority: EventPriority.NORMAL };
+    const event1: BaseEvent = { id: '13', type: 'event.one', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event2: BaseEvent = { id: '14', type: 'event.two', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event3: BaseEvent = { id: '15', type: 'event.three', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
 
     await dispatcher.emitEvent(event1);
     await dispatcher.emitEvent(event2);
@@ -181,9 +181,9 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
 
     dispatcher.unsubscribeFromAll(handler);
 
-    const event1: BaseEvent = { id: '16', type: 'event.one', priority: EventPriority.NORMAL };
-    const event2: BaseEvent = { id: '17', type: 'event.two', priority: EventPriority.NORMAL };
-    const event3: BaseEvent = { id: '18', type: 'another.event', priority: EventPriority.NORMAL };
+    const event1: BaseEvent = { id: '16', type: 'event.one', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event2: BaseEvent = { id: '17', type: 'event.two', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event3: BaseEvent = { id: '18', type: 'another.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
 
     await dispatcher.emitEvent(event1);
     await dispatcher.emitEvent(event2);
