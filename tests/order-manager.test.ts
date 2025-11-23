@@ -31,7 +31,7 @@ describe('SimpleOrderManager', () => {
     });
 
     it('should return an error for invalid order requests', async () => {
-      const invalidRequest = { ...mockCreateOrderRequest, quantity: 0 }; // Invalid quantity
+      const invalidRequest = { ...mockCreateOrderRequest, amount: new Decimal(0) }; // Invalid amount (must be greater than 0)
       const result = await orderManager.placeOrder(invalidRequest);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
