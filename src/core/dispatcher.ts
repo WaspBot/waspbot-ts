@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
-import { EventListener, AnyEventCallback, createEventListener } from './listener.js';
-import { BaseEvent, EventPriority } from './events.js';
-import { clamp } from '../utils/math.js';
+import { EventListener, AnyEventCallback, createEventListener } from './listener';
+import { BaseEvent, EventPriority } from './events';
+import { clamp } from '../utils/math';
 import { QueueMetrics, QueueProcessingState } from '../types';
 
 // ============================================================================
@@ -52,6 +52,15 @@ export interface FilteredSubscription {
   filter: EventFilter;
   /** Whether subscription is active */
   active: boolean;
+}
+
+/**
+ * Represents a subscription with a pattern (can be a wildcard) and a listener.
+ */
+export interface PatternSubscription {
+  pattern: string;
+  listener: EventListener;
+  handler: AnyEventCallback; // To help with unsubscribing
 }
 
 // ============================================================================
@@ -636,8 +645,8 @@ export function deserializeEvent(json: string): BaseEvent {
  * Central event dispatcher with subscription management and priority queuing
  */
 export class EventDispatcher extends EventEmitter {
-  private readonly listenerRegistry = new Map<string, Set<EventListener>>();
-  private readonly handlerToListenerMap = new Map<string, Map<AnyEventCallback, EventListener>>();
+  private readonly listenerRegistry = new Set<PatternSubscription>();
+  private readonly handlerToListenerMap = new Map<AnyEventCallback, PatternSubscription>();
   private readonly config: Required<EventDispatcherConfig>;
   private readonly eventQueue: EventQueue;
   private processing = false;
@@ -694,21 +703,22 @@ export class EventDispatcher extends EventEmitter {
   /**
    * Subscribe a listener to specific event types
    */
-  public subscribe(eventType: string, handler: AnyEventCallback): void {
-    if (!this.listenerRegistry.has(eventType)) {
-      this.listenerRegistry.set(eventType, new Set());
-      this.handlerToListenerMap.set(eventType, new Map());
+  public subscribe(pattern: string, handler: AnyEventCallback): void {
+    // Short-circuit if the handler is already registered for this pattern
+    // This check is simplified as handlerToListenerMap now directly maps handler to subscription
+    if (this.handlerToListenerMap.has(handler)) {
+      const existingSubscription = this.handlerToListenerMap.get(handler);
+      if (existingSubscription && existingSubscription.pattern === pattern) {
+        return; // Already subscribed to this exact pattern with this handler
+      }
     }
 
-    // Short-circuit if the handler is already registered for this eventType
-    if (this.handlerToListenerMap.get(eventType)!.has(handler)) {
-      return;
-    }
+    const listener = createEventListener(`event-${pattern}-handler`, handler);
+    const subscription: PatternSubscription = { pattern, listener, handler };
 
-    const listener = createEventListener(`event-${eventType}-handler`, handler);
-    this.listenerRegistry.get(eventType)!.add(listener);
-    this.handlerToListenerMap.get(eventType)!.set(handler, listener);
-    super.emit('listenerAdded', eventType, listener);
+    this.listenerRegistry.add(subscription);
+    this.handlerToListenerMap.set(handler, subscription);
+    super.emit('listenerAdded', pattern, listener);
   }
 
   /**
@@ -751,29 +761,17 @@ export class EventDispatcher extends EventEmitter {
     };
     this.subscribe(eventType, onceHandler);
   }
-    for (const eventType of eventTypes) {
-      this.subscribe(eventType, listener);
-    }
-  }
 
   /**
    * Unsubscribe a listener from specific event types
    */
-  public unsubscribe(eventType: string, handler: AnyEventCallback): void {
-    const listeners = this.listenerRegistry.get(eventType);
-    const handlerMap = this.handlerToListenerMap.get(eventType);
+  public unsubscribe(pattern: string, handler: AnyEventCallback): void {
+    const subscriptionToRemove = this.handlerToListenerMap.get(handler);
 
-    if (listeners && handlerMap) {
-      const listenerToRemove = handlerMap.get(handler);
-      if (listenerToRemove) {
-        listeners.delete(listenerToRemove);
-        handlerMap.delete(handler);
-        if (listeners.size === 0) {
-          this.listenerRegistry.delete(eventType);
-          this.handlerToListenerMap.delete(eventType);
-        }
-        super.emit('listenerRemoved', eventType, listenerToRemove);
-      }
+    if (subscriptionToRemove && subscriptionToRemove.pattern === pattern) {
+      this.listenerRegistry.delete(subscriptionToRemove);
+      this.handlerToListenerMap.delete(handler);
+      super.emit('listenerRemoved', pattern, subscriptionToRemove.listener);
     }
   }
 
@@ -811,18 +809,26 @@ export class EventDispatcher extends EventEmitter {
   }
 
   /**
-   * Get all listeners for an event type
+   * Unsubscribe from multiple event types at once
    */
-  public getListeners(eventType: string): EventListener[] {
-    const listeners = this.listenerRegistry.get(eventType);
-    return listeners ? Array.from(listeners) : [];
+  public unsubscribeFromMultiple(patterns: string[], listener: EventListener): void {
+    for (const pattern of patterns) {
+      for (const subscription of this.listenerRegistry) {
+        if (subscription.listener === listener && subscription.pattern === pattern) {
+          this.unsubscribe(pattern, subscription.handler);
+          // Assuming a listener can only be subscribed once to a specific pattern
+          break;
+        }
+      }
+    }
   }
-
-  /**
-   * Get all listeners for an event (including filtered subscriptions)
-   */
   public getAllListenersForEvent(event: BaseEvent): EventListener[] {
-    const directListeners = this.getListeners(event.type);
+    const matchingPatternListeners: EventListener[] = [];
+    for (const subscription of this.listenerRegistry) {
+      if (this.matchesPattern(event.type, subscription.pattern)) {
+        matchingPatternListeners.push(subscription.listener);
+      }
+    }
 
     // Collect route listeners ordered by route priority (desc)
     const routeListenersPrioritized: EventListener[] = Array.from(this.eventRoutes.values())
@@ -839,7 +845,7 @@ export class EventDispatcher extends EventEmitter {
     }
 
     // Combine in order and dedupe preserving first occurrence
-    const combined = [...directListeners, ...routeListenersPrioritized, ...filteredListeners];
+    const combined = [...matchingPatternListeners, ...routeListenersPrioritized, ...filteredListeners];
     const seen = new Set<EventListener>();
     const deduped: EventListener[] = [];
     for (const l of combined) {
@@ -855,19 +861,19 @@ export class EventDispatcher extends EventEmitter {
    * Check if there are any listeners for an event type
    */
   public hasListeners(eventType: string): boolean {
-    const listeners = this.listenerRegistry.get(eventType);
-    return listeners ? listeners.size > 0 : false;
+    for (const subscription of this.listenerRegistry) {
+      if (this.matchesPattern(eventType, subscription.pattern)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
    * Get total number of registered listeners
    */
   public getListenerCount(): number {
-    let count = 0;
-    for (const listeners of this.listenerRegistry.values()) {
-      count += listeners.size;
-    }
-    return count;
+    return this.listenerRegistry.size;
   }
 
   // ============================================================================

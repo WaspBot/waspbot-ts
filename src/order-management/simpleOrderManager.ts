@@ -6,9 +6,8 @@ import {
 import {
   CreateOrderRequest,
   OrderState,
-  validateCreateOrderRequest,
-  InFlightOrder,
-} from '../types/orders-basic';
+} from './order';
+import { validateCreateOrderRequest } from './orderUtils';
 import {
   WaspBotError,
   ExchangeId,

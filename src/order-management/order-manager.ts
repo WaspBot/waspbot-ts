@@ -26,7 +26,7 @@ import {
   TradingPair,
   ExchangeId,
   WaspBotError,
-} from './common';
+} from '../types/common';
 
 import {
   OrderState,
@@ -36,7 +36,7 @@ import {
   OrderUpdate,
   TradeUpdate,
   validateCreateOrderRequest,
-} from './orders-basic';
+} from './order';
 
 import {
   Position,
