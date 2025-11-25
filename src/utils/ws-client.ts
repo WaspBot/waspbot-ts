@@ -18,10 +18,26 @@ export class WsClient {
   private lastReconnectTimestamp: Date | null = null;
   private messageListeners: ((message: string) => void)[] = [];
 
-  constructor(url: string, maxRetries: number = 3, retryDelayMs: number = 1000) {
+  private pingIntervalMs: number;
+  private pingTimeoutMs: number;
+  private pingTimer: ReturnType<typeof setTimeout> | null = null;
+  private pongTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastPingTimestamp: number | null = null;
+  private latency: number | null = null;
+  private healthCallback: ((latency: number) => void) | null = null;
+
+  constructor(
+    url: string,
+    maxRetries: number = 3,
+    retryDelayMs: number = 1000,
+    pingIntervalMs: number = 30000, // Default to 30 seconds
+    pingTimeoutMs: number = 5000 // Default to 5 seconds
+  ) {
     this.url = url;
     this.maxRetries = maxRetries;
     this.retryDelayMs = retryDelayMs;
+    this.pingIntervalMs = pingIntervalMs;
+    this.pingTimeoutMs = pingTimeoutMs;
   }
 
   public connect(): void {
@@ -51,12 +67,27 @@ export class WsClient {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
       }
+      this.startPing();
     };
 
     this.ws.onmessage = (event: WebSocket.MessageEvent) => {
       // Logger.debug(`WsClient: Received message from ${this.url}: ${event.data}`);
       this.messageListeners.forEach(listener => listener(event.data.toString()));
     };
+
+    this.ws.on('pong', () => {
+      if (this.lastPingTimestamp) {
+        this.latency = Date.now() - this.lastPingTimestamp;
+        Logger.debug(`WsClient: Received pong from ${this.url}. Latency: ${this.latency}ms`);
+        if (this.healthCallback) {
+          this.healthCallback(this.latency);
+        }
+      }
+      if (this.pongTimer) {
+        clearTimeout(this.pongTimer);
+        this.pongTimer = null;
+      }
+    });
 
     this.ws.onerror = (event: WebSocket.ErrorEvent) => {
       Logger.error(`WsClient: WebSocket error on ${this.url}: ${event.message}`);
@@ -82,7 +113,47 @@ export class WsClient {
         );
         this.isReconnecting = false;
       }
+      this.stopPing();
     };
+  }
+
+  private startPing(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+    }
+    this.pingTimer = setInterval(() => {
+      this.sendPing();
+    }, this.pingIntervalMs);
+  }
+
+  private stopPing(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+    if (this.pongTimer) {
+      clearTimeout(this.pongTimer);
+      this.pongTimer = null;
+    }
+  }
+
+  private sendPing(): void {
+    if (this.ws && this.isConnected) {
+      this.lastPingTimestamp = Date.now();
+      this.ws.ping();
+      Logger.debug(`WsClient: Sent ping to ${this.url}`);
+
+      if (this.pongTimer) {
+        clearTimeout(this.pongTimer);
+      }
+      this.pongTimer = setTimeout(() => {
+        Logger.warn(`WsClient: Pong timeout for ${this.url}. Latency unknown.`);
+        this.latency = null;
+        if (this.healthCallback) {
+          this.healthCallback(this.latency);
+        }
+      }, this.pingTimeoutMs);
+    }
   }
 
   public send(message: string): void {
@@ -104,6 +175,7 @@ export class WsClient {
       this.isConnected = false;
       this.isReconnecting = false;
       this.reconnectAttempts = 0; // Reset attempts on explicit close
+      this.stopPing();
       // Remove event listeners to prevent memory leaks
       this.ws.onopen = null;
       this.ws.onmessage = null;
@@ -121,6 +193,14 @@ export class WsClient {
 
   public removeMessageListener(listener: (message: string) => void): void {
     this.messageListeners = this.messageListeners.filter(l => l !== listener);
+  }
+
+  public setHealthCallback(callback: (latency: number) => void): void {
+    this.healthCallback = callback;
+  }
+
+  public getLatency(): number | null {
+    return this.latency;
   }
 
   public getIsConnected(): boolean {

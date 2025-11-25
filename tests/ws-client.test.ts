@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 
 // Mock WebSocket and Logger
 jest.mock('ws', () => {
-  return jest.fn().mockImplementation((url) => {
+  const mockWebSocket = jest.fn().mockImplementation((url) => {
     return {
       url,
       onopen: jest.fn(),
@@ -13,9 +13,14 @@ jest.mock('ws', () => {
       onclose: jest.fn(),
       send: jest.fn(),
       close: jest.fn(),
-      readyState: WebSocket.CONNECTING, // Default state
+      ping: jest.fn(), // Add ping to the mock
+      on: jest.fn(), // Add on for pong event
+      readyState: mockWebSocket.CONNECTING, // Use the mock's static property
     };
   });
+  mockWebSocket.CONNECTING = 0;
+  mockWebSocket.OPEN = 1;
+  return mockWebSocket;
 });
 
 jest.mock('../src/core/logger', () => ({
