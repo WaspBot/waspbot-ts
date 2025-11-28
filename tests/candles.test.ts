@@ -162,6 +162,132 @@ describe('Candle Aggregation', () => {
     expect(secondAggregated.closeTime).toBe(baseTime + 6 * 60 * 1000 + 60 * 1000 - 1);
   });
 
+  it('should aggregate a single candle into a larger interval correctly', () => {
+    const baseTime = new Date('2023-01-01T00:00:00.000Z').getTime();
+    const singleCandle = createMockCandle(baseTime, { open: 100, high: 105, low: 98, close: 102, volume: 10 });
+
+    const aggregated = aggregateCandles([singleCandle], CandleInterval.ONE_HOUR);
+
+    expect(aggregated.length).toBe(1);
+    const result = aggregated[0];
+
+    expect(result.open.toNumber()).toBe(singleCandle.open.toNumber());
+    expect(result.high.toNumber()).toBe(singleCandle.high.toNumber());
+    expect(result.low.toNumber()).toBe(singleCandle.low.toNumber());
+    expect(result.close.toNumber()).toBe(singleCandle.close.toNumber());
+    expect(result.volume.toNumber()).toBe(singleCandle.volume.toNumber());
+    expect(result.interval).toBe(CandleInterval.ONE_HOUR);
+    expect(result.openTime).toBe(baseTime);
+    expect(result.closeTime).toBe(singleCandle.closeTime);
+  });
+
+  it('should handle non-contiguous candles within an aggregation period', () => {
+    const baseTime = new Date('2023-01-01T00:00:00.000Z').getTime();
+    const candles: Candle[] = [
+      createMockCandle(baseTime + 0 * 60 * 1000, { open: 100, high: 101, low: 99, close: 100, volume: 10 }),
+      // Gap for 1 minute
+      createMockCandle(baseTime + 2 * 60 * 1000, { open: 100, high: 102, low: 98, close: 101, volume: 10 }),
+      // Gap for 1 minute
+      createMockCandle(baseTime + 4 * 60 * 1000, { open: 101, high: 103, low: 99, close: 102, volume: 10 }),
+    ];
+
+    const aggregated = aggregateCandles(candles, CandleInterval.FIVE_MINUTES);
+
+    expect(aggregated.length).toBe(1);
+    const result = aggregated[0];
+
+    expect(result.open.toNumber()).toBe(100);
+    expect(result.high.toNumber()).toBe(103);
+    expect(result.low.toNumber()).toBe(98);
+    expect(result.close.toNumber()).toBe(102);
+    expect(result.volume.toNumber()).toBe(30);
+    expect(result.openTime).toBe(baseTime);
+    expect(result.closeTime).toBe(baseTime + 4 * 60 * 1000 + 60 * 1000 - 1);
+  });
+
+  it('should aggregate candles that perfectly fill the target interval', () => {
+    const baseTime = new Date('2023-01-01T00:00:00.000Z').getTime();
+    const candles: Candle[] = [
+      createMockCandle(baseTime + 0 * 60 * 1000, { open: 100, high: 101, low: 99, close: 100, volume: 10 }),
+      createMockCandle(baseTime + 1 * 60 * 1000, { open: 100, high: 102, low: 98, close: 101, volume: 10 }),
+      createMockCandle(baseTime + 2 * 60 * 1000, { open: 101, high: 103, low: 99, close: 102, volume: 10 }),
+    ];
+
+    const aggregated = aggregateCandles(candles, CandleInterval.THREE_MINUTES);
+
+    expect(aggregated.length).toBe(1);
+    const result = aggregated[0];
+
+    expect(result.open.toNumber()).toBe(100);
+    expect(result.high.toNumber()).toBe(103);
+    expect(result.low.toNumber()).toBe(98);
+    expect(result.close.toNumber()).toBe(102);
+    expect(result.volume.toNumber()).toBe(30);
+    expect(result.interval).toBe(CandleInterval.THREE_MINUTES);
+    expect(result.openTime).toBe(baseTime);
+    expect(result.closeTime).toBe(baseTime + 2 * 60 * 1000 + 60 * 1000 - 1);
+  });
+
+  it('should handle candles with identical open/high/low/close values (flat market)', () => {
+    const baseTime = new Date('2023-01-01T00:00:00.000Z').getTime();
+    const candles: Candle[] = [
+      createMockCandle(baseTime + 0 * 60 * 1000, { open: 100, high: 100, low: 100, close: 100, volume: 5 }),
+      createMockCandle(baseTime + 1 * 60 * 1000, { open: 100, high: 100, low: 100, close: 100, volume: 5 }),
+      createMockCandle(baseTime + 2 * 60 * 1000, { open: 100, high: 100, low: 100, close: 100, volume: 5 }),
+    ];
+
+    const aggregated = aggregateCandles(candles, CandleInterval.THREE_MINUTES);
+
+    expect(aggregated.length).toBe(1);
+    const result = aggregated[0];
+
+    expect(result.open.toNumber()).toBe(100);
+    expect(result.high.toNumber()).toBe(100);
+    expect(result.low.toNumber()).toBe(100);
+    expect(result.close.toNumber()).toBe(100);
+    expect(result.volume.toNumber()).toBe(15);
+  });
+
+  it('should correctly aggregate candles with decreasing values', () => {
+    const baseTime = new Date('2023-01-01T00:00:00.000Z').getTime();
+    const candles: Candle[] = [
+      createMockCandle(baseTime + 0 * 60 * 1000, { open: 110, high: 112, low: 108, close: 109, volume: 10 }),
+      createMockCandle(baseTime + 1 * 60 * 1000, { open: 109, high: 110, low: 105, close: 106, volume: 15 }),
+      createMockCandle(baseTime + 2 * 60 * 1000, { open: 106, high: 107, low: 103, close: 104, volume: 20 }),
+    ];
+
+    const aggregated = aggregateCandles(candles, CandleInterval.THREE_MINUTES);
+
+    expect(aggregated.length).toBe(1);
+    const result = aggregated[0];
+
+    expect(result.open.toNumber()).toBe(110);
+    expect(result.high.toNumber()).toBe(112);
+    expect(result.low.toNumber()).toBe(103);
+    expect(result.close.toNumber()).toBe(104);
+    expect(result.volume.toNumber()).toBe(45);
+  });
+
+  it('should correctly aggregate candles with increasing values', () => {
+    const baseTime = new Date('2023-01-01T00:00:00.000Z').getTime();
+    const candles: Candle[] = [
+      createMockCandle(baseTime + 0 * 60 * 1000, { open: 100, high: 102, low: 98, close: 101, volume: 10 }),
+      createMockCandle(baseTime + 1 * 60 * 1000, { open: 101, high: 105, low: 100, close: 104, volume: 15 }),
+      createMockCandle(baseTime + 2 * 60 * 1000, { open: 104, high: 108, low: 103, close: 107, volume: 20 }),
+    ];
+
+    const aggregated = aggregateCandles(candles, CandleInterval.THREE_MINUTES);
+
+    expect(aggregated.length).toBe(1);
+    const result = aggregated[0];
+
+    expect(result.open.toNumber()).toBe(100);
+    expect(result.high.toNumber()).toBe(108);
+    expect(result.low.toNumber()).toBe(98);
+    expect(result.close.toNumber()).toBe(107);
+    expect(result.volume.toNumber()).toBe(45);
+  });
+
   it('should handle candles that do not perfectly align with the aggregation period start', () => {
     const baseTime = new Date('2023-01-01T00:00:00.000Z').getTime(); // Fixed base time for alignment
     const candles: Candle[] = [
