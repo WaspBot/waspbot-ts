@@ -78,14 +78,24 @@ export interface DepthLevel {
   orderCount?: number;
 }
 
+/**
+ * Rolling bid/ask imbalance metric
+ */
+export interface RollingImbalance {
+  timestamp: Timestamp;
+  imbalance: DecimalAmount;
+}
+
 export class OrderBookManager {
   private orderBook: OrderBook;
   private readonly checksumInterval: number = 1000; // Checksum every 1000 updates
   private lastChecksum: number = 0;
   private updateCount: number = 0;
   private resubscribeCallback: () => void;
+  private imbalanceHistory: RollingImbalance[] = [];
+  private rollingImbalanceWindowSize: number;
 
-  constructor(initialSnapshot: OrderBook, resubscribeCallback: () => void) {
+  constructor(initialSnapshot: OrderBook, resubscribeCallback: () => void, rollingImbalanceWindowSize: number = 100) {
     if (!initialSnapshot) {
       throw new Error('Initial snapshot cannot be null or undefined.');
     }
@@ -114,6 +124,15 @@ export class OrderBookManager {
       asks: validatedAsks,
     };
     this.resubscribeCallback = resubscribeCallback;
+    this.rollingImbalanceWindowSize = rollingImbalanceWindowSize;
+    // Calculate and store initial imbalance
+    const initialImbalance = this.calculateBidAskImbalance();
+    if (initialImbalance !== undefined) {
+      this.imbalanceHistory.push({
+        timestamp: initialSnapshot.timestamp,
+        imbalance: initialImbalance,
+      });
+    }
     this.calculateAndStoreChecksum();
   }
 
@@ -148,6 +167,19 @@ export class OrderBookManager {
     });
   }
 
+  private calculateBidAskImbalance(): DecimalAmount | undefined {
+    const totalBidVolume = this.orderBook.bids.reduce((sum, entry) => sum.plus(entry.quantity), new Decimal(0));
+    const totalAskVolume = this.orderBook.asks.reduce((sum, entry) => sum.plus(entry.quantity), new Decimal(0));
+
+    const totalVolume = totalBidVolume.plus(totalAskVolume);
+
+    if (totalVolume.isZero()) {
+      return undefined;
+    }
+
+    return totalBidVolume.minus(totalAskVolume).dividedBy(totalVolume) as DecimalAmount;
+  }
+
   public applyDiff(diff: OrderBookDiff): void {
     // Validate update IDs
     if (diff.firstUpdateId !== this.orderBook.lastUpdateId + 1) {
@@ -174,6 +206,18 @@ export class OrderBookManager {
     this.orderBook.timestamp = diff.timestamp;
     this.orderBook.eventTime = diff.eventTime;
 
+    // Calculate and store rolling imbalance
+    const currentImbalance = this.calculateBidAskImbalance();
+    if (currentImbalance !== undefined) {
+      this.imbalanceHistory.push({
+        timestamp: diff.timestamp,
+        imbalance: currentImbalance,
+      });
+      if (this.imbalanceHistory.length > this.rollingImbalanceWindowSize) {
+        this.imbalanceHistory.shift(); // Remove the oldest entry
+      }
+    }
+
     this.updateCount++;
     if (this.updateCount % this.checksumInterval === 0) {
       this.verifyChecksum();
@@ -186,6 +230,32 @@ export class OrderBookManager {
       bids: this.orderBook.bids.map(entry => ({ ...entry })),
       asks: this.orderBook.asks.map(entry => ({ ...entry })),
     };
+  }
+
+  public getRollingBidAskImbalance(): DecimalAmount | undefined {
+    if (this.imbalanceHistory.length === 0) {
+      return undefined;
+    }
+
+    const totalImbalance = this.imbalanceHistory.reduce((sum, entry) => sum.plus(entry.imbalance), new Decimal(0));
+    return totalImbalance.dividedBy(this.imbalanceHistory.length) as DecimalAmount;
+  }
+
+  public toJSONSnapshot(): string {
+    const orderBook = this.getOrderBook();
+    const rollingImbalance = this.getRollingBidAskImbalance();
+
+    const snapshot = {
+      exchangeId: orderBook.exchangeId,
+      symbol: orderBook.symbol,
+      timestamp: orderBook.timestamp,
+      lastUpdateId: orderBook.lastUpdateId,
+      bids: orderBook.bids.map(entry => ({ price: entry.price.toString(), quantity: entry.quantity.toString() })),
+      asks: orderBook.asks.map(entry => ({ price: entry.price.toString(), quantity: entry.quantity.toString() })),
+      rollingBidAskImbalance: rollingImbalance ? rollingImbalance.toString() : undefined,
+    };
+
+    return JSON.stringify(snapshot, null, 2);
   }
 
   private applyEntry(entries: OrderBookEntry[], diffEntry: OrderBookEntry): void {
