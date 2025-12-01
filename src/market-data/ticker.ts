@@ -73,6 +73,8 @@ export interface Ticker {
 export class TickerManager {
   private windowSize: number;
   private tickers: Ticker[] = [];
+  private spreadHistory: Decimal[] = [];
+  private priceHistory: Decimal[] = [];
 
   constructor(windowSize: number) {
     if (windowSize <= 0) {
@@ -85,6 +87,22 @@ export class TickerManager {
     this.tickers.push(ticker);
     if (this.tickers.length > this.windowSize) {
       this.tickers.shift(); // Remove the oldest ticker
+    }
+
+    if (ticker.bidPrice && ticker.askPrice) {
+      const bid = new Decimal(ticker.bidPrice);
+      const ask = new Decimal(ticker.askPrice);
+      this.spreadHistory.push(ask.minus(bid));
+    } else {
+      this.spreadHistory.push(new Decimal(0)); // Push 0 or handle as needed for missing data
+    }
+    if (this.spreadHistory.length > this.windowSize) {
+      this.spreadHistory.shift();
+    }
+
+    this.priceHistory.push(new Decimal(ticker.lastPrice));
+    if (this.priceHistory.length > this.windowSize) {
+      this.priceHistory.shift();
     }
   }
 
@@ -123,6 +141,49 @@ export class TickerManager {
     }
 
     return undefined;
+  }
+
+  get rollingSpreadWidth(): DecimalAmount | undefined {
+    if (this.spreadHistory.length === 0) {
+      return undefined;
+    }
+    const sum = this.spreadHistory.reduce((acc, spread) => acc.plus(spread), new Decimal(0));
+    return sum.dividedBy(this.spreadHistory.length) as DecimalAmount;
+  }
+
+  get shortTermVolatility(): DecimalAmount | undefined {
+    if (this.priceHistory.length < 2) {
+      return undefined;
+    }
+
+    const logReturns: Decimal[] = [];
+    for (let i = 1; i < this.priceHistory.length; i++) {
+      const currentPrice = this.priceHistory[i];
+      const previousPrice = this.priceHistory[i - 1];
+      if (!previousPrice.isZero()) {
+        logReturns.push(currentPrice.dividedBy(previousPrice).ln());
+      }
+    }
+
+    if (logReturns.length === 0) {
+      return undefined;
+    }
+
+    const sumReturns = logReturns.reduce((acc, ret) => acc.plus(ret), new Decimal(0));
+    const meanReturn = sumReturns.dividedBy(logReturns.length);
+
+    const sumOfSquaredDifferences = logReturns.reduce(
+      (acc, ret) => acc.plus(ret.minus(meanReturn).pow(2)),
+      new Decimal(0),
+    );
+
+    // Using sample standard deviation (n-1 degrees of freedom)
+    if (logReturns.length < 2) {
+      return undefined;
+    }
+
+    const variance = sumOfSquaredDifferences.dividedBy(new Decimal(logReturns.length - 1));
+    return variance.sqrt() as DecimalAmount;
   }
 }
 
