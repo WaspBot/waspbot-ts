@@ -93,11 +93,9 @@ export class TickerManager {
       const bid = new Decimal(ticker.bidPrice);
       const ask = new Decimal(ticker.askPrice);
       this.spreadHistory.push(ask.minus(bid));
-    } else {
-      this.spreadHistory.push(new Decimal(0)); // Push 0 or handle as needed for missing data
-    }
-    if (this.spreadHistory.length > this.windowSize) {
-      this.spreadHistory.shift();
+      if (this.spreadHistory.length > this.windowSize) {
+        this.spreadHistory.shift();
+      }
     }
 
     this.priceHistory.push(new Decimal(ticker.lastPrice));
@@ -160,7 +158,7 @@ export class TickerManager {
     for (let i = 1; i < this.priceHistory.length; i++) {
       const currentPrice = this.priceHistory[i];
       const previousPrice = this.priceHistory[i - 1];
-      if (!previousPrice.isZero()) {
+      if (!previousPrice.isZero() && !currentPrice.isZero()) {
         logReturns.push(currentPrice.dividedBy(previousPrice).ln());
       }
     }
