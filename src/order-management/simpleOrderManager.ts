@@ -1,8 +1,4 @@
-import {
-  OrderManager,
-  OrderPlacementResult,
-  OrderCancellationResult,
-} from '../types/orders-management';
+import { Logger } from '../core/logger';
 import {
   CreateOrderRequest,
   OrderState,
@@ -130,7 +126,17 @@ export function createInFlightOrder(req: CreateOrderRequest): InFlightOrder {
   return new InFlightOrderImpl(req);
 }
 
+import { Logger } from '../core/logger'; // Assuming a Logger is available
+
 export class SimpleOrderManager implements OrderManager {
+  private readonly cancelReplaceRateLimitMs: number;
+  private readonly lastCancelReplaceTimestamp: Map<TradingPair, number> = new Map();
+  private readonly logger: Logger;
+
+  constructor(cancelReplaceRateLimitMs: number = 1000) {
+    this.cancelReplaceRateLimitMs = cancelReplaceRateLimitMs;
+    this.logger = new Logger(SimpleOrderManager.name);
+  }
   /**
    * Stores all in-flight orders by their clientOrderId.
    * An in-flight order is one that has been submitted to an exchange but not yet in a terminal state (filled, cancelled, failed).
@@ -221,6 +227,26 @@ export class SimpleOrderManager implements OrderManager {
       };
     }
 
+    // --- Rate Limiting Logic ---
+    const now = Date.now();
+    const tradingPair = order.tradingPair;
+    const lastCancelTime = this.lastCancelReplaceTimestamp.get(tradingPair) || 0;
+
+    if (now - lastCancelTime < this.cancelReplaceRateLimitMs) {
+      this.logger.warn(`Cancel/Replace rate limit exceeded for ${tradingPair}. Last operation was ${now - lastCancelTime}ms ago.`);
+      return {
+        success: false,
+        clientOrderId,
+        error: `Rate limit exceeded for ${tradingPair}. Please wait before cancelling/replacing orders for this pair.`,
+        currentState: order.state,
+        timestamp: now,
+      };
+    }
+    // Update the timestamp for this trading pair
+    this.lastCancelReplaceTimestamp.set(tradingPair, now);
+    // --- End Rate Limiting Logic ---
+
+
     if (isOrderInState(order, [OrderState.PENDING_CANCEL])) {
       return {
         success: false,
@@ -288,6 +314,7 @@ export class SimpleOrderManager implements OrderManager {
     throw new Error('Not implemented');
   }
   async modifyOrder(clientOrderId: string, modification: any) {
+    // TODO: When implementing modifyOrder, ensure it also respects the cancel/replace rate limit
     throw new Error('Not implemented');
   }
   async getOrder(clientOrderId: string) {
