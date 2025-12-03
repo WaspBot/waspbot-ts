@@ -11,7 +11,7 @@ describe('SimpleOrderManager', () => {
   });
 
   const mockCreateOrderRequest: CreateOrderRequest = {
-    tradingPair: 'BTC_USDT',
+    tradingPair: 'BTC-USDT',
     clientOrderId: 'test-order-123',
     side: TradingSide.BUY,
     orderType: OrderType.LIMIT,

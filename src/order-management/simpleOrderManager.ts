@@ -1,10 +1,15 @@
 import { Logger } from '../core/logger';
 import {
-  CreateOrderRequest,
   OrderState,
   InFlightOrder,
+  CreateOrderRequest,
+  TradeUpdate,
+  PositionMode,
+  PositionSide,
+  parseTradingPair,
+  validateCreateOrderRequest,
 } from './order';
-import { validateCreateOrderRequest } from './orderUtils';
+import { isOrderInState, filterInFlightOrdersByState } from './orderUtils';
 import {
   WaspBotError,
   ExchangeId,
