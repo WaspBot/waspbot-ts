@@ -227,7 +227,7 @@ export class SimpleOrderManager implements OrderManager {
       };
     }
 
-    if (isOrderInState(order, [OrderState.CANCELLED, OrderState.FILLED, OrderState.FAILED])) {
+    if ([OrderState.CANCELLED, OrderState.FILLED, OrderState.FAILED].includes(order.state)) {
       return {
         success: false,
         clientOrderId,
