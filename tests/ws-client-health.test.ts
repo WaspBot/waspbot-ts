@@ -1,9 +1,6 @@
 import { WsClient } from '../src/utils/ws-client';
 import { Logger } from '../src/core/logger';
-import WebSocket from 'ws';
 
-// Mock WebSocket and Logger
-jest.mock(\'ws\', () => {\n  const mockWebSocket = jest.fn().mockImplementation((url) => {\n    const mockWs = {\n      url,\n      onopen: jest.fn(),\n      onmessage: jest.fn(),\      onerror: jest.fn(),\n      onclose: jest.fn(),\n      send: jest.fn(),\n      close: jest.fn(),\n      ping: jest.fn(),\n      on: jest.fn(), // Mock the \'on\' method for event listeners like \'pong\'\n      readyState: mockWebSocket.CONNECTING, // Default state\n    };\n    // Simulate the \'pong\' event being emitted when ping() is called\n    mockWs.ping.mockImplementation(() => {\n      if (mockWs.on.mock.calls.some(call => call[0] === \'pong\')) {\n        // Find the pong listener and call it after a short delay to simulate network\n        setTimeout(() => {\n          const pongListener = mockWs.on.mock.calls.find(call => call[0] === \'pong\')[1];\n          pongListener();\n        }, 50);\n      }\n    });\n    return mockWs;\n  });\n  mockWebSocket.CONNECTING = 0;\n  mockWebSocket.OPEN = 1;\n  return mockWebSocket;\n});
 
 jest.mock('../src/core/logger', () => ({
   Logger: {
