@@ -21,7 +21,6 @@ import {
   TimeInForce,
   PositionAction,
 } from '../types/common';
-import { isOrderInState, filterInFlightOrdersByState } from './orderUtils';
 
 class InFlightOrderImpl implements InFlightOrder {
   id: string;
@@ -131,16 +130,12 @@ export function createInFlightOrder(req: CreateOrderRequest): InFlightOrder {
   return new InFlightOrderImpl(req);
 }
 
-import { Logger } from '../core/logger'; // Assuming a Logger is available
-
 export class SimpleOrderManager implements OrderManager {
   private readonly cancelReplaceRateLimitMs: number;
   private readonly lastCancelReplaceTimestamp: Map<TradingPair, number> = new Map();
-  private readonly logger: Logger;
 
   constructor(cancelReplaceRateLimitMs: number = 1000) {
     this.cancelReplaceRateLimitMs = cancelReplaceRateLimitMs;
-    this.logger = new Logger(SimpleOrderManager.name);
   }
   /**
    * Stores all in-flight orders by their clientOrderId.
@@ -238,7 +233,7 @@ export class SimpleOrderManager implements OrderManager {
     const lastCancelTime = this.lastCancelReplaceTimestamp.get(tradingPair) || 0;
 
     if (now - lastCancelTime < this.cancelReplaceRateLimitMs) {
-      this.logger.warn(`Cancel/Replace rate limit exceeded for ${tradingPair}. Last operation was ${now - lastCancelTime}ms ago.`);
+      Logger.warn(SimpleOrderManager.name, `Cancel/Replace rate limit exceeded for ${tradingPair}. Last operation was ${now - lastCancelTime}ms ago.`);
       return {
         success: false,
         clientOrderId,
@@ -247,8 +242,6 @@ export class SimpleOrderManager implements OrderManager {
         timestamp: now,
       };
     }
-    // Update the timestamp for this trading pair
-    this.lastCancelReplaceTimestamp.set(tradingPair, now);
     // --- End Rate Limiting Logic ---
 
 
@@ -277,6 +270,7 @@ export class SimpleOrderManager implements OrderManager {
     this.pendingCancelOrderIds.add(clientOrderId);
     // In a real scenario, a connector would confirm cancellation and call processOrderUpdate
     order.updateState(OrderState.CANCELLED);
+    this.lastCancelReplaceTimestamp.set(tradingPair, Date.now());
 
     return {
       success: true,
