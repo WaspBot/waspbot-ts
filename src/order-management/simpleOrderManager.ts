@@ -227,23 +227,15 @@ export class SimpleOrderManager implements OrderManager {
       };
     }
 
-    // --- Rate Limiting Logic ---
-    const now = Date.now();
-    const tradingPair = order.tradingPair;
-    const lastCancelTime = this.lastCancelReplaceTimestamp.get(tradingPair) || 0;
-
-    if (now - lastCancelTime < this.cancelReplaceRateLimitMs) {
-      Logger.warn(SimpleOrderManager.name, `Cancel/Replace rate limit exceeded for ${tradingPair}. Last operation was ${now - lastCancelTime}ms ago.`);
+    if (isOrderInState(order, [OrderState.CANCELLED, OrderState.FILLED, OrderState.FAILED])) {
       return {
         success: false,
         clientOrderId,
-        error: `Rate limit exceeded for ${tradingPair}. Please wait before cancelling/replacing orders for this pair.`,
+        error: `Order is already in a terminal state: ${order.state}`,
         currentState: order.state,
-        timestamp: now,
+        timestamp: Date.now(),
       };
     }
-    // --- End Rate Limiting Logic ---
-
 
     if (isOrderInState(order, [OrderState.PENDING_CANCEL])) {
       return {
@@ -255,22 +247,29 @@ export class SimpleOrderManager implements OrderManager {
       };
     }
 
-    if (isOrderInState(order, [OrderState.CANCELLED, OrderState.FILLED, OrderState.FAILED])) {
+    // --- Rate Limiting Logic ---
+    const now = Date.now();
+    const tradingPair = order.tradingPair;
+    const lastCancelTime = this.lastCancelReplaceTimestamp.get(tradingPair) || 0;
+
+    if (now - lastCancelTime < this.cancelReplaceRateLimitMs) {
+      Logger.warn(`[${SimpleOrderManager.name}] Cancel/Replace rate limit exceeded for ${tradingPair}. Last operation was ${now - lastCancelTime}ms ago.`);
       return {
         success: false,
         clientOrderId,
-        error: `Order is already in a terminal state: ${order.state}`,
+        error: `Rate limit exceeded for ${tradingPair}. Please wait before cancelling/replacing orders for this pair.`,
         currentState: order.state,
-        timestamp: Date.now(),
+        timestamp: now,
       };
     }
+    // --- End Rate Limiting Logic ---
 
     // Mark order as pending cancellation
     order.updateState(OrderState.PENDING_CANCEL);
     this.pendingCancelOrderIds.add(clientOrderId);
     // In a real scenario, a connector would confirm cancellation and call processOrderUpdate
     order.updateState(OrderState.CANCELLED);
-    this.lastCancelReplaceTimestamp.set(tradingPair, Date.now());
+    this.lastCancelReplaceTimestamp.set(tradingPair, now);
 
     return {
       success: true,
