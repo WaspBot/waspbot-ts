@@ -1,14 +1,15 @@
+import { Logger } from '../core/logger';
 import {
-  OrderManager,
-  OrderPlacementResult,
-  OrderCancellationResult,
-} from '../types/orders-management';
-import {
-  CreateOrderRequest,
   OrderState,
   InFlightOrder,
+  CreateOrderRequest,
+  TradeUpdate,
+  PositionMode,
+  PositionSide,
+  parseTradingPair,
+  validateCreateOrderRequest,
 } from './order';
-import { validateCreateOrderRequest } from './orderUtils';
+import { isOrderInState, filterInFlightOrdersByState } from './orderUtils';
 import {
   WaspBotError,
   ExchangeId,
@@ -20,7 +21,6 @@ import {
   TimeInForce,
   PositionAction,
 } from '../types/common';
-import { isOrderInState, filterInFlightOrdersByState } from './orderUtils';
 
 class InFlightOrderImpl implements InFlightOrder {
   id: string;
@@ -131,6 +131,12 @@ export function createInFlightOrder(req: CreateOrderRequest): InFlightOrder {
 }
 
 export class SimpleOrderManager implements OrderManager {
+  private readonly cancelReplaceRateLimitMs: number;
+  private readonly lastCancelReplaceTimestamp: Map<TradingPair, number> = new Map();
+
+  constructor(cancelReplaceRateLimitMs: number = 1000) {
+    this.cancelReplaceRateLimitMs = cancelReplaceRateLimitMs;
+  }
   /**
    * Stores all in-flight orders by their clientOrderId.
    * An in-flight order is one that has been submitted to an exchange but not yet in a terminal state (filled, cancelled, failed).
@@ -221,6 +227,16 @@ export class SimpleOrderManager implements OrderManager {
       };
     }
 
+    if ([OrderState.CANCELLED, OrderState.FILLED, OrderState.FAILED].includes(order.state)) {
+      return {
+        success: false,
+        clientOrderId,
+        error: `Order is already in a terminal state: ${order.state}`,
+        currentState: order.state,
+        timestamp: Date.now(),
+      };
+    }
+
     if (isOrderInState(order, [OrderState.PENDING_CANCEL])) {
       return {
         success: false,
@@ -231,21 +247,29 @@ export class SimpleOrderManager implements OrderManager {
       };
     }
 
-    if (isOrderInState(order, [OrderState.CANCELLED, OrderState.FILLED, OrderState.FAILED])) {
+    // --- Rate Limiting Logic ---
+    const now = Date.now();
+    const tradingPair = order.tradingPair;
+    const lastCancelTime = this.lastCancelReplaceTimestamp.get(tradingPair) || 0;
+
+    if (now - lastCancelTime < this.cancelReplaceRateLimitMs) {
+      Logger.warn(`[${SimpleOrderManager.name}] Cancel/Replace rate limit exceeded for ${tradingPair}. Last operation was ${now - lastCancelTime}ms ago.`);
       return {
         success: false,
         clientOrderId,
-        error: `Order is already in a terminal state: ${order.state}`,
+        error: `Rate limit exceeded for ${tradingPair}. Please wait before cancelling/replacing orders for this pair.`,
         currentState: order.state,
-        timestamp: Date.now(),
+        timestamp: now,
       };
     }
+    // --- End Rate Limiting Logic ---
 
     // Mark order as pending cancellation
     order.updateState(OrderState.PENDING_CANCEL);
     this.pendingCancelOrderIds.add(clientOrderId);
     // In a real scenario, a connector would confirm cancellation and call processOrderUpdate
     order.updateState(OrderState.CANCELLED);
+    this.lastCancelReplaceTimestamp.set(tradingPair, now);
 
     return {
       success: true,
@@ -288,6 +312,7 @@ export class SimpleOrderManager implements OrderManager {
     throw new Error('Not implemented');
   }
   async modifyOrder(clientOrderId: string, modification: any) {
+    // TODO: When implementing modifyOrder, ensure it also respects the cancel/replace rate limit
     throw new Error('Not implemented');
   }
   async getOrder(clientOrderId: string) {
