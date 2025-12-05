@@ -21,6 +21,25 @@ import { PositionSide, PositionMode, PositionAction } from '../order-management/
 // ============================================================================
 
 /**
+ * Represents a single entry (or a portion of an entry) into a position.
+ * Allows for tracking PnL per specific trade or leg.
+ */
+export interface EntryLeg {
+  /** Unique identifier for this entry leg */
+  id: string;
+  /** Quantity of the asset acquired in this leg */
+  quantity: Quantity;
+  /** Price at which this leg was entered */
+  entryPrice: Price;
+  /** Timestamp of the entry */
+  entryTime: Timestamp;
+  /** Realized PnL specifically from this leg (e.g., if partially closed) */
+  realizedPnl: DecimalAmount;
+  /** Fees associated with this entry leg */
+  fees: DecimalAmount;
+}
+
+/**
  * Represents a trading position in a specific asset or trading pair.
  * Tracks both spot holdings and derivative positions with comprehensive metrics.
  */
@@ -34,20 +53,11 @@ export interface Position {
   /** Position side classification */
   side: PositionSide;
 
-  /** Average entry price for the position */
-  entryPrice: Price;
+  /** Individual entry legs that make up this position */
+  legs: EntryLeg[];
 
   /** Current mark price used for unrealized PnL calculation */
   markPrice: Price;
-
-  /** Unrealized profit and loss */
-  unrealizedPnl: DecimalAmount;
-
-  /** Realized profit and loss from closed portions */
-  realizedPnl: DecimalAmount;
-
-  /** Percentage return on the position */
-  percentage: DecimalAmount;
 
   /** Leverage multiplier used (1 for spot positions) */
   leverage: number;
@@ -76,6 +86,9 @@ export interface Position {
   /** Total fees paid for this position */
   totalFees: DecimalAmount;
 
+  /** Cumulative realized PnL for the entire position */
+  realizedPnl: DecimalAmount;
+
   /** Position age in milliseconds */
   age: number;
 
@@ -90,42 +103,190 @@ export interface Position {
 }
 
 /**
- * Position summary for quick overview and aggregation.
+ * Calculates the unrealized PnL for a single EntryLeg.
+ * @param leg The entry leg to calculate PnL for.
+ * @param markPrice The current mark price of the asset.
+ * @param positionSide The side of the overall position (Long/Short).
+ * @returns The unrealized PnL for the leg.
  */
-export interface PositionSummary {
-  /** Total number of positions */
-  totalPositions: number;
+export function calculateEntryLegUnrealizedPnl(
+  leg: EntryLeg,
+  markPrice: Price,
+  positionSide: PositionSide,
+): DecimalAmount {
+  const priceDiff = markPrice.value - leg.entryPrice.value;
+  let pnl = priceDiff * Math.abs(leg.quantity.value);
 
-  /** Number of long positions */
-  longPositions: number;
+  if (positionSide === PositionSide.SHORT) {
+    pnl *= -1;
+  }
 
-  /** Number of short positions */
-  shortPositions: number;
+  // Subtract entry fees from unrealized PnL
+  pnl -= leg.fees.value;
 
-  /** Total unrealized PnL across all positions */
+  return { value: pnl, currency: markPrice.currency };
+}
+
+/**
+ * Adds a new entry leg to a position and updates the position's overall size and side.
+ * @param position The current position.
+ * @param newLeg The new entry leg to add.
+ * @returns The updated position.
+ */
+export function addEntryLeg(position: Position, newLeg: EntryLeg): Position {
+  const updatedLegs = [...position.legs, newLeg];
+  const newSizeValue = position.size.value + newLeg.quantity.value;
+  const newSide = newSizeValue > 0 ? PositionSide.LONG : newSizeValue < 0 ? PositionSide.SHORT : PositionSide.FLAT;
+
+  return {
+    ...position,
+    legs: updatedLegs,
+    size: { value: newSizeValue, asset: position.size.asset },
+    side: newSide,
+  };
+}
+
+/**
+ * Closes a portion of a position, calculating realized PnL.
+ * This function attempts to close existing legs in a FIFO manner.
+ * @param position The current position.
+ * @param closeQuantity The quantity to close.
+ * @param closePrice The price at which the quantity is closed.
+ * @returns An object containing the updated position and the total realized PnL from this closure.
+ */
+export function closeEntryLeg(
+  position: Position,
+  closeQuantity: Quantity,
+  closePrice: Price,
+): { updatedPosition: Position; realizedPnl: DecimalAmount } {
+  let remainingCloseQuantity = Math.abs(closeQuantity.value);
+  let totalRealizedPnlFromClosure = 0; // PnL specifically from this close operation
+  const updatedLegs: EntryLeg[] = [];
+
+  for (const leg of position.legs) {
+    if (remainingCloseQuantity <= 0) {
+      updatedLegs.push(leg);
+      continue;
+    }
+
+    const absLegQuantity = Math.abs(leg.quantity.value);
+    const quantityToCloseFromLeg = Math.min(remainingCloseQuantity, absLegQuantity);
+
+    if (quantityToCloseFromLeg > 0) {
+      const pnlFromLegMagnitude = (closePrice.value - leg.entryPrice.value) * quantityToCloseFromLeg;
+      let pnlFromLeg = position.side === PositionSide.LONG ? pnlFromLegMagnitude : -pnlFromLegMagnitude;
+
+      // Proportionally subtract fees from pnlFromLeg for the closed quantity
+      const feeProportion = quantityToCloseFromLeg / absLegQuantity;
+      const feesToSubtract = leg.fees.value * feeProportion;
+      pnlFromLeg -= feesToSubtract;
+
+      totalRealizedPnlFromClosure += pnlFromLeg;
+
+      const newLegQuantityValue = Math.sign(leg.quantity.value) * (absLegQuantity - quantityToCloseFromLeg);
+
+      if (Math.abs(newLegQuantityValue) > 0) {
+        // If leg is partially closed, update its quantity and its realized PnL
+        updatedLegs.push({
+          ...leg,
+          quantity: { value: newLegQuantityValue, asset: leg.quantity.asset },
+          realizedPnl: { value: leg.realizedPnl.value + pnlFromLeg, currency: leg.realizedPnl.currency },
+        });
+      } else {
+        // If leg is fully closed, its realized PnL is already accounted for in totalRealizedPnlFromClosure
+        // and in the leg itself (if we choose to keep it in the updatedPosition for audit, though the prompt implies removal).
+        // For now, we are removing fully closed legs from updatedLegs.
+      }
+      remainingCloseQuantity -= quantityToCloseFromLeg;
+    } else {
+      updatedLegs.push(leg);
+    }
+  }
+
+  const signedCloseQuantity = Math.sign(position.size.value) * Math.abs(closeQuantity.value);
+  const newSizeValue = position.size.value - signedCloseQuantity;
+  const newSide = newSizeValue > 0 ? PositionSide.LONG : newSizeValue < 0 ? PositionSide.SHORT : PositionSide.FLAT;
+
+  return {
+    updatedPosition: {
+      ...position,
+      legs: updatedLegs,
+      size: { value: newSizeValue, asset: position.size.asset },
+      side: newSide,
+      realizedPnl: { value: position.realizedPnl.value + totalRealizedPnlFromClosure, currency: position.realizedPnl.currency },
+    },
+    realizedPnl: { value: totalRealizedPnlFromClosure, currency: closePrice.currency },
+  };
+}
+
+/**
+ * Updates the mark price of a position.
+ * This function primarily updates the markPrice field, and doesn't re-calculate PnL directly.
+ * PnL re-calculation should be handled by aggregatePositionPnl.
+ * @param position The current position.
+ * @param newMarkPrice The new mark price.
+ * @returns The updated position.
+ */
+export function updatePositionMarkPrice(position: Position, newMarkPrice: Price): Position {
+  return {
+    ...position,
+    markPrice: newMarkPrice,
+  };
+}
+
+/**
+ * Aggregates PnL across all legs of a position and calculates overall position metrics.
+ * @param position The position to aggregate PnL for.
+ * @param currentMarkPrice The current mark price of the asset.
+ * @returns An object containing aggregated total unrealized PnL, total realized PnL, effective entry price, and percentage return.
+ */
+export function aggregatePositionPnl(
+  position: Position,
+  currentMarkPrice: Price,
+): {
   totalUnrealizedPnl: DecimalAmount;
-
-  /** Total realized PnL across all positions */
   totalRealizedPnl: DecimalAmount;
+  entryPrice: Price;
+  percentage: DecimalAmount;
+} {
+  let totalUnrealizedPnlValue = 0;
+  let totalRealizedPnlValue = 0;
+  let totalQuantity = 0;
+  let weightedEntryPriceSum = 0;
 
-  /** Total notional value of all positions */
-  totalNotional: DecimalAmount;
+  for (const leg of position.legs) {
+    totalUnrealizedPnlValue += calculateEntryLegUnrealizedPnl(leg, currentMarkPrice, position.side).value;
+    // Sum realized PnL from partial closes of *these remaining* legs
+    totalRealizedPnlValue += leg.realizedPnl.value;
+    totalQuantity += leg.quantity.value;
+    weightedEntryPriceSum += leg.entryPrice.value * leg.quantity.value;
+  }
 
-  /** Total margin used across all positions */
-  totalMargin: DecimalAmount;
+  // Add the cumulative realized PnL from the position object (from fully closed legs)
+  totalRealizedPnlValue += position.realizedPnl.value;
 
-  /** Largest position by notional value */
-  largestPosition?: Position;
+  const entryPriceValue = totalQuantity !== 0 ? weightedEntryPriceSum / totalQuantity : 0;
+  const entryPrice: Price = { value: entryPriceValue, currency: currentMarkPrice.currency };
 
-  /** Most profitable position */
-  mostProfitablePosition?: Position;
+  const totalPnL = totalUnrealizedPnlValue + totalRealizedPnlValue;
+  let percentageValue = 0;
 
-  /** Least profitable position */
-  leastProfitablePosition?: Position;
+  // Corrected percentage calculation: use absolute quantity and prevent division by zero
+  const absoluteTotalQuantity = Math.abs(totalQuantity);
+  if (entryPrice.value !== 0 && absoluteTotalQuantity > 0) {
+    percentageValue = (totalPnL / (entryPrice.value * absoluteTotalQuantity)) * 100;
+  }
+
+  return {
+    totalUnrealizedPnl: { value: totalUnrealizedPnlValue, currency: currentMarkPrice.currency },
+    totalRealizedPnl: { value: totalRealizedPnlValue, currency: currentMarkPrice.currency },
+    entryPrice,
+    percentage: { value: percentageValue, currency: currentMarkPrice.currency },
+  };
 }
 
 // ============================================================================
-// Balance Management Types
+// Position Summary Types
 // ============================================================================
 
 /**
