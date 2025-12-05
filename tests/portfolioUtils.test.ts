@@ -122,9 +122,9 @@ describe('portfolioUtils', () => {
       const totalValue = calculateTotalPortfolioValue(mockPortfolio); // Should be 7500 from setupMockPortfolio
       expect(totalValue.toString()).toBe('7500');
 
-      // Position values and weights:
-      // BTC: entryPrice 50000, amount 0.1 => 5000. Weight = 5000/7500 = 2/3
-      // ETH: entryPrice 3000, amount 0.5 => 1500. Weight = 1500/7500 = 1/3
+      // Position values and weights (against sumOfRiskyPositionValues = 6500):
+      // BTC: entryPrice 50000, amount 0.1 => 5000. Weight = 5000/6500 \u2248 0.76923
+      // ETH: entryPrice 3000, amount 0.5 => 1500. Weight = 1500/6500 \u2248 0.23077
 
       const historicalReturns: HistoricalReturns = {
         'BTC_USDT': [-0.01, -0.005, 0.02, -0.03, 0.015, -0.02],
@@ -132,21 +132,18 @@ describe('portfolioUtils', () => {
       };
 
       // Number of historical periods = 6
-      // For 99% confidence, index is floor((1 - 0.99) * 6) = floor(0.01 * 6) = floor(0.06) = 0.
-      // We need to calculate portfolio returns for each period.
-      const expectedPortfolioReturns: Decimal[] = [
-        new Decimal((2/3) * (-0.01) + (1/3) * (-0.005)), // Period 0: -0.00666... - 0.00166... = -0.00833...
-        new Decimal((2/3) * (-0.005) + (1/3) * (-0.01)), // Period 1: -0.00333... - 0.00333... = -0.00666...
-        new Decimal((2/3) * (0.02) + (1/3) * (0.01)),   // Period 2: 0.01333... + 0.00333... = 0.01666...
-        new Decimal((2/3) * (-0.03) + (1/3) * (-0.002)), // Period 3: -0.02 + -0.00066... = -0.02066...
-        new Decimal((2/3) * (0.015) + (1/3) * (0.008)),  // Period 4: 0.01 + 0.00266... = 0.01266...
-        new Decimal((2/3) * (-0.02) + (1/3) * (-0.015)), // Period 5: -0.01333... - 0.005 = -0.01833...
-      ];
-
-      // Sorted expected portfolio returns:
-      // [-0.02066..., -0.01833..., -0.00833..., -0.00666..., 0.01266..., 0.01666...]
-      // The 0-th element (for 99% VaR) is -0.02066...
-      // VaR = -0.02066... * 7500 = -155
+      // For 99% confidence, VaR index is floor((1 - 0.99) * 6) = floor(0.06) = 0.
+      // Calculated portfolio returns (weights: BTC \u2248 0.76923, ETH \u2248 0.23077) for each period:
+      // Period 0: (0.76923 * -0.01) + (0.23077 * -0.005) \u2248 -0.008846
+      // Period 1: (0.76923 * -0.005) + (0.23077 * -0.01) \u2248 -0.006154
+      // Period 2: (0.76923 * 0.02) + (0.23077 * 0.01) \u2248 0.017692
+      // Period 3: (0.76923 * -0.03) + (0.23077 * -0.002) \u2248 -0.023538
+      // Period 4: (0.76923 * 0.015) + (0.23077 * 0.008) \u2248 0.013385
+      // Period 5: (0.76923 * -0.02) + (0.23077 * -0.015) \u2248 -0.018846
+      // Sorted portfolio returns: [-0.023538, -0.018846, -0.008846, -0.006154, 0.013385, 0.017692]
+      // The 0-th element (for 99% VaR) is -0.023538.
+      // totalOverallPortfolioValue is 7500.
+      // VaR = -0.023538 * 7500 \u2248 -176.535
 
       const varValue = calculateHistoricalVaR(mockPortfolio, historicalReturns, 0.99);
       expect(varValue.toDecimalPlaces(2).toString()).toBe('-176.54');

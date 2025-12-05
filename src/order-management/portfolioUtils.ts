@@ -4,7 +4,6 @@ import { Decimal } from 'decimal.js';
 export type HistoricalReturns = {
   [symbol: string]: number[];
 };
-import { Decimal } from 'decimal.js';
 
 /**
  * Calculate the total portfolio value in the base currency (e.g., USD).
