@@ -112,7 +112,7 @@ export function calculateEntryLegUnrealizedPnl(
   positionSide: PositionSide,
 ): DecimalAmount {
   const priceDiff = markPrice.value - leg.entryPrice.value;
-  let pnl = priceDiff * leg.quantity.value;
+  let pnl = priceDiff * Math.abs(leg.quantity.value);
 
   if (positionSide === PositionSide.SHORT) {
     pnl *= -1;
@@ -153,7 +153,7 @@ export function closeEntryLeg(
   closeQuantity: Quantity,
   closePrice: Price,
 ): { updatedPosition: Position; realizedPnl: DecimalAmount } {
-  let remainingCloseQuantity = closeQuantity.value;
+  let remainingCloseQuantity = Math.abs(closeQuantity.value);
   let totalRealizedPnlValue = 0;
   const updatedLegs: EntryLeg[] = [];
 
@@ -163,26 +163,31 @@ export function closeEntryLeg(
       continue;
     }
 
-    const quantityToCloseFromLeg = Math.min(remainingCloseQuantity, leg.quantity.value);
-    if (quantityToCloseFromLeg > 0) {
-      const pnlFromLeg = (closePrice.value - leg.entryPrice.value) * quantityToCloseFromLeg;
-      totalRealizedPnlValue += position.side === PositionSide.LONG ? pnlFromLeg : -pnlFromLeg;
+    const absLegQuantity = Math.abs(leg.quantity.value);
+    const quantityToCloseFromLeg = Math.min(remainingCloseQuantity, absLegQuantity);
 
-      const newLegQuantity = leg.quantity.value - quantityToCloseFromLeg;
-      if (newLegQuantity > 0) {
+    if (quantityToCloseFromLeg > 0) {
+      const pnlFromLegMagnitude = (closePrice.value - leg.entryPrice.value) * quantityToCloseFromLeg;
+      const pnlFromLeg = position.side === PositionSide.LONG ? pnlFromLegMagnitude : -pnlFromLegMagnitude;
+      totalRealizedPnlValue += pnlFromLeg;
+
+      const newLegQuantityValue = Math.sign(leg.quantity.value) * (absLegQuantity - quantityToCloseFromLeg);
+
+      if (Math.abs(newLegQuantityValue) > 0) {
         updatedLegs.push({
           ...leg,
-          quantity: { value: newLegQuantity, asset: leg.quantity.asset },
-          realizedPnl: { value: leg.realizedPnl.value + (position.side === PositionSide.LONG ? pnlFromLeg : -pnlFromLeg), currency: leg.realizedPnl.currency },
+          quantity: { value: newLegQuantityValue, asset: leg.quantity.asset },
+          realizedPnl: { value: leg.realizedPnl.value + pnlFromLeg, currency: leg.realizedPnl.currency },
         });
       }
       remainingCloseQuantity -= quantityToCloseFromLeg;
     } else {
-        updatedLegs.push(leg);
+      updatedLegs.push(leg);
     }
   }
 
-  const newSizeValue = position.size.value - closeQuantity.value;
+  const signedCloseQuantity = Math.sign(position.size.value) * Math.abs(closeQuantity.value);
+  const newSizeValue = position.size.value - signedCloseQuantity;
   const newSide = newSizeValue > 0 ? PositionSide.LONG : newSizeValue < 0 ? PositionSide.SHORT : PositionSide.FLAT;
 
   return {
@@ -192,6 +197,7 @@ export function closeEntryLeg(
       size: { value: newSizeValue, asset: position.size.asset },
       side: newSide,
     },
+    realizedPnl: { value: totalRealizedPnlValue, currency: closePrice.currency },
   };
 }
 
@@ -207,8 +213,6 @@ export function updatePositionMarkPrice(position: Position, newMarkPrice: Price)
   return {
     ...position,
     markPrice: newMarkPrice,
-  };
-}
   };
 }
 
@@ -239,7 +243,7 @@ export function aggregatePositionPnl(
     weightedEntryPriceSum += leg.entryPrice.value * leg.quantity.value;
   }
 
-  const entryPriceValue = totalQuantity > 0 ? weightedEntryPriceSum / totalQuantity : 0;
+  const entryPriceValue = totalQuantity !== 0 ? weightedEntryPriceSum / totalQuantity : 0;
   const entryPrice: Price = { value: entryPriceValue, currency: currentMarkPrice.currency };
 
   const totalPnL = totalUnrealizedPnlValue + totalRealizedPnlValue;
