@@ -86,6 +86,9 @@ export interface Position {
   /** Total fees paid for this position */
   totalFees: DecimalAmount;
 
+  /** Cumulative realized PnL for the entire position */
+  realizedPnl: DecimalAmount;
+
   /** Position age in milliseconds */
   age: number;
 
@@ -117,6 +120,9 @@ export function calculateEntryLegUnrealizedPnl(
   if (positionSide === PositionSide.SHORT) {
     pnl *= -1;
   }
+
+  // Subtract entry fees from unrealized PnL
+  pnl -= leg.fees.value;
 
   return { value: pnl, currency: markPrice.currency };
 }
@@ -154,7 +160,7 @@ export function closeEntryLeg(
   closePrice: Price,
 ): { updatedPosition: Position; realizedPnl: DecimalAmount } {
   let remainingCloseQuantity = Math.abs(closeQuantity.value);
-  let totalRealizedPnlValue = 0;
+  let totalRealizedPnlFromClosure = 0; // PnL specifically from this close operation
   const updatedLegs: EntryLeg[] = [];
 
   for (const leg of position.legs) {
@@ -168,17 +174,28 @@ export function closeEntryLeg(
 
     if (quantityToCloseFromLeg > 0) {
       const pnlFromLegMagnitude = (closePrice.value - leg.entryPrice.value) * quantityToCloseFromLeg;
-      const pnlFromLeg = position.side === PositionSide.LONG ? pnlFromLegMagnitude : -pnlFromLegMagnitude;
-      totalRealizedPnlValue += pnlFromLeg;
+      let pnlFromLeg = position.side === PositionSide.LONG ? pnlFromLegMagnitude : -pnlFromLegMagnitude;
+
+      // Proportionally subtract fees from pnlFromLeg for the closed quantity
+      const feeProportion = quantityToCloseFromLeg / absLegQuantity;
+      const feesToSubtract = leg.fees.value * feeProportion;
+      pnlFromLeg -= feesToSubtract;
+
+      totalRealizedPnlFromClosure += pnlFromLeg;
 
       const newLegQuantityValue = Math.sign(leg.quantity.value) * (absLegQuantity - quantityToCloseFromLeg);
 
       if (Math.abs(newLegQuantityValue) > 0) {
+        // If leg is partially closed, update its quantity and its realized PnL
         updatedLegs.push({
           ...leg,
           quantity: { value: newLegQuantityValue, asset: leg.quantity.asset },
           realizedPnl: { value: leg.realizedPnl.value + pnlFromLeg, currency: leg.realizedPnl.currency },
         });
+      } else {
+        // If leg is fully closed, its realized PnL is already accounted for in totalRealizedPnlFromClosure
+        // and in the leg itself (if we choose to keep it in the updatedPosition for audit, though the prompt implies removal).
+        // For now, we are removing fully closed legs from updatedLegs.
       }
       remainingCloseQuantity -= quantityToCloseFromLeg;
     } else {
@@ -196,8 +213,9 @@ export function closeEntryLeg(
       legs: updatedLegs,
       size: { value: newSizeValue, asset: position.size.asset },
       side: newSide,
+      realizedPnl: { value: position.realizedPnl.value + totalRealizedPnlFromClosure, currency: position.realizedPnl.currency },
     },
-    realizedPnl: { value: totalRealizedPnlValue, currency: closePrice.currency },
+    realizedPnl: { value: totalRealizedPnlFromClosure, currency: closePrice.currency },
   };
 }
 
@@ -238,18 +256,25 @@ export function aggregatePositionPnl(
 
   for (const leg of position.legs) {
     totalUnrealizedPnlValue += calculateEntryLegUnrealizedPnl(leg, currentMarkPrice, position.side).value;
+    // Sum realized PnL from partial closes of *these remaining* legs
     totalRealizedPnlValue += leg.realizedPnl.value;
     totalQuantity += leg.quantity.value;
     weightedEntryPriceSum += leg.entryPrice.value * leg.quantity.value;
   }
+
+  // Add the cumulative realized PnL from the position object (from fully closed legs)
+  totalRealizedPnlValue += position.realizedPnl.value;
 
   const entryPriceValue = totalQuantity !== 0 ? weightedEntryPriceSum / totalQuantity : 0;
   const entryPrice: Price = { value: entryPriceValue, currency: currentMarkPrice.currency };
 
   const totalPnL = totalUnrealizedPnlValue + totalRealizedPnlValue;
   let percentageValue = 0;
-  if (entryPrice.value > 0) {
-    percentageValue = (totalPnL / (entryPrice.value * totalQuantity)) * 100;
+
+  // Corrected percentage calculation: use absolute quantity and prevent division by zero
+  const absoluteTotalQuantity = Math.abs(totalQuantity);
+  if (entryPrice.value !== 0 && absoluteTotalQuantity > 0) {
+    percentageValue = (totalPnL / (entryPrice.value * absoluteTotalQuantity)) * 100;
   }
 
   return {
