@@ -32,3 +32,35 @@ export function filterInFlightOrdersByState(
 ): InFlightOrder[] {
   return orders.filter(order => isOrderInState(order, state));
 }
+
+/**
+ * Validates if a given quantity is within the specified minimum and maximum limits.
+ * @param quantity The quantity to validate.
+ * @param min The minimum allowed quantity.
+ * @param max The maximum allowed quantity.
+ * @returns True if the quantity is within limits, false otherwise.
+ */
+export function validateMinMaxQuantity(quantity: number, min: number, max: number): boolean {
+  return quantity >= min && quantity <= max;
+}
+
+/**
+ * Validates if the notional value (quantity * price) meets the minimum notional requirement.
+ * @param quantity The quantity of the order.
+ * @param price The price of the asset.
+ * @param minNotional The minimum allowed notional value.
+ * @returns True if the notional value meets the minimum requirement, false otherwise.
+ */
+export function validateNotional(quantity: number, price: number, minNotional: number): boolean {
+  return (quantity * price) >= minNotional;
+}
+
+/**
+ * Validates if the requested leverage is within the maximum allowed leverage.
+ * @param leverage The requested leverage.
+ * @param maxLeverage The maximum allowed leverage.
+ * @returns True if the leverage is within limits, false otherwise.
+ */
+export function validateLeverage(leverage: number, maxLeverage: number): boolean {
+  return leverage <= maxLeverage;
+}
