@@ -41,6 +41,49 @@ export interface RateLimiterConfig {
 }
 
 /**
+ * Implements a token bucket for rate limiting.
+ * Tokens are added at a fixed fill rate, up to a maximum capacity.
+ */
+class TokenBucket {
+  private tokens: number;
+  private lastRefillTimestamp: number;
+  private readonly capacity: number;
+  private readonly fillRate: number; // tokens per interval
+  private readonly interval: number; // milliseconds
+
+  constructor(config: RateLimiterConfig) {
+    this.capacity = config.capacity;
+    this.fillRate = config.fillRate;
+    this.interval = config.interval;
+    this.tokens = config.capacity; // Start with a full bucket
+    this.lastRefillTimestamp = Date.now();
+  }
+
+  /**
+   * Tries to consume a token. If no tokens are available, it waits until one is.
+   */
+  async acquire(): Promise<void> {
+    this.refill();
+    while (this.tokens < 1) {
+      const timeToNextRefill = this.interval - (Date.now() - this.lastRefillTimestamp);
+      await new Promise(resolve => setTimeout(resolve, timeToNextRefill > 0 ? timeToNextRefill : 0));
+      this.refill();
+    }
+    this.tokens--;
+  }
+
+  private refill(): void {
+    const now = Date.now();
+    const timePassed = now - this.lastRefillTimestamp;
+    if (timePassed > 0) {
+      const tokensToAdd = (timePassed / this.interval) * this.fillRate;
+      this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
+      this.lastRefillTimestamp = now;
+    }
+  }
+}
+
+/**
  * Configuration interface for connector initialization
  */
 export interface ConnectorConfig {
@@ -125,6 +168,7 @@ export abstract class BaseConnector extends EventEmitter {
   protected lastHeartbeat: Timestamp = 0;
   protected reconnectAttempts: number = 0;
   protected maxReconnectAttempts: number = 5;
+  protected rateLimiter?: TokenBucket;
 
   /**
    * Creates an instance of BaseConnector.
@@ -134,6 +178,10 @@ export abstract class BaseConnector extends EventEmitter {
     super();
     this.config = config;
     this.validateConfig(config);
+
+    if (config.rateLimiter) {
+      this.rateLimiter = new TokenBucket(config.rateLimiter);
+    }
   }
 
   // ============================================================================
@@ -341,6 +389,13 @@ export abstract class BaseConnector extends EventEmitter {
    * @returns A Promise that resolves with a TradingFees object.
    */
   abstract getTradingFees(symbol: TradingPair): Promise<TradingFees>;
+
+  protected async executeWithLimiter<T>(requestFn: () => Promise<T>): Promise<T> {
+    if (this.rateLimiter) {
+      await this.rateLimiter.acquire();
+    }
+    return requestFn();
+  }
 
   // ============================================================================
   // Health and Monitoring
