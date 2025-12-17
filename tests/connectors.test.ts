@@ -3,9 +3,9 @@
  */
 
 import { BinanceConnector } from '../src/connectors/binance';
-import { ConnectorConfig } from '../src/connectors/base-connector';
+import { ConnectorConfig, BaseConnector, RateLimiterConfig } from '../src/connectors/base-connector';
 import { Logger } from '../src/core/logger';
-import { TokenBucket } from '../src/connectors/binance'; // Import TokenBucket for direct testing
+import { TokenBucket } from '../src/connectors/base-connector';
 
 // Mock Logger to prevent console output during tests
 jest.mock('../src/core/logger', () => ({
