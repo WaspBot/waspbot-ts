@@ -165,6 +165,8 @@ class EventQueue {
     totalFailed: 0,
     averageProcessingTime: 0,
     totalDropped: 0,
+    queueSize: 0,
+    batchBacklog: 0,
   };
 
   private updateMetrics(): void { /* no-op */ }
@@ -519,7 +521,11 @@ class EventQueue {
   }
 
   public getMetrics(): QueueMetrics {
-    return { ...this.metrics };
+    return {
+      ...this.metrics,
+      queueSize: this.queue.length,
+      batchBacklog: this.batchBuffer.length,
+    };
   }
 
   public resetMetrics(): void {
@@ -1374,11 +1380,7 @@ export class EventDispatcher extends EventEmitter {
       }
 
       const result = listener.handleEvent(event);
-
-      // Handle async results
-      if (result instanceof Promise) {
-        await result;
-      }
+      await Promise.resolve(result);
     } catch (error) {
       console.error(`Error in listener ${listener.getName()} for event ${event.type}:`, error);
     }
@@ -1489,6 +1491,9 @@ export interface QueueMetrics {
   totalProcessed: number;
   totalFailed: number;
   averageProcessingTime: number;
+  queueSize: number;
+  batchBacklog: number;
+  totalDropped: number;
 }
 
 /**
