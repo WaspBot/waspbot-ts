@@ -1,4 +1,3 @@
-
 import { EventDispatcher } from '../src/core/dispatcher';
 import { BaseEvent, EventPriority, EventStatus } from '../src/core/events';
 
@@ -190,5 +189,127 @@ describe('EventDispatcher Wildcard Subscriptions', () => {
     await dispatcher.emitEvent(event3);
 
     expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe('EventDispatcher Queue Metrics', () => {
+  let dispatcher: EventDispatcher;
+
+  beforeEach(() => {
+    dispatcher = new EventDispatcher('TestDispatcher', {
+      maxQueueSize: 5,
+      overflowStrategy: 'drop_incoming',
+      batch: { maxBatchSize: 2, maxBatchDelay: 100, strategy: 'sequential' },
+    });
+    dispatcher.markAsReady();
+  });
+
+  afterEach(() => {
+    dispatcher.dispose();
+  });
+
+  it('should provide correct initial queue metrics', () => {
+    const metrics = dispatcher.getQueueMetrics();
+    expect(metrics.queueSize).toBe(0);
+    expect(metrics.batchBacklog).toBe(0);
+    expect(metrics.totalDropped).toBe(0);
+    expect(metrics.totalProcessed).toBe(0);
+    expect(metrics.totalFailed).toBe(0);
+    expect(metrics.averageProcessingTime).toBe(0);
+  });
+
+  it('should update queue metrics after emitting events', async () => {
+    const handler = jest.fn();
+    dispatcher.subscribe('test.event', handler);
+
+    const event1: BaseEvent = { id: '1', type: 'test.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event2: BaseEvent = { id: '2', type: 'test.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+
+    await dispatcher.emitEvent(event1);
+    await dispatcher.emitEvent(event2);
+
+    // Give some time for async processing to complete
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const metrics = dispatcher.getQueueMetrics();
+
+    expect(metrics.queueSize).toBe(0);
+    expect(metrics.batchBacklog).toBe(0);
+    expect(metrics.totalProcessed).toBe(2);
+    expect(metrics.totalDropped).toBe(0);
+
+    // Emit more events to test dropped events and queue size before processing
+    const event3: BaseEvent = { id: '3', type: 'test.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event4: BaseEvent = { id: '4', type: 'test.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event5: BaseEvent = { id: '5', type: 'test.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event6: BaseEvent = { id: '6', type: 'test.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event7: BaseEvent = { id: '7', type: 'test.event', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+
+    await dispatcher.emitEvent(event3); // Queue: 1
+    await dispatcher.emitEvent(event4); // Queue: 2
+    await dispatcher.emitEvent(event5); // Queue: 3
+    await dispatcher.emitEvent(event6); // Queue: 4
+    await dispatcher.emitEvent(event7); // Queue: 5, then should drop since maxQueueSize is 5 and overflowStrategy is drop_incoming
+
+    const metricsAfterOverflow = dispatcher.getQueueMetrics();
+    expect(metricsAfterOverflow.queueSize).toBeLessThanOrEqual(5); // Queue size should not exceed maxSize
+    expect(metricsAfterOverflow.totalDropped).toBeGreaterThanOrEqual(1); // At least one event should be dropped
+
+    // Ensure all enqueued events are eventually processed
+    await new Promise(resolve => setTimeout(resolve, 300)); // Wait for all events to be processed
+
+    const finalMetrics = dispatcher.getQueueMetrics();
+    expect(finalMetrics.queueSize).toBe(0);
+    expect(finalMetrics.batchBacklog).toBe(0);
+    // totalProcessed will be 2 (from first batch) + at most 5 (from second batch if not dropped)
+    // The exact number depends on when `emitEvent` resolves and `processQueue` runs.
+    // We expect 5 additional events to be processed, assuming no drops for the initially enqueued ones.
+    expect(finalMetrics.totalProcessed).toBeGreaterThanOrEqual(2 + 4); // 2 from first batch, 4 from second batch if 1 dropped
+
+    dispatcher.clearQueue();
+    dispatcher.resetQueueMetrics();
+    const clearedMetrics = dispatcher.getQueueMetrics();
+    expect(clearedMetrics.queueSize).toBe(0);
+    expect(clearedMetrics.batchBacklog).toBe(0);
+    expect(clearedMetrics.totalDropped).toBe(0);
+    expect(clearedMetrics.totalProcessed).toBe(0);
+  });
+
+  it('should reflect batch backlog when events are buffered', async () => {
+    // Configure dispatcher to use batching that buffers events
+    dispatcher.dispose(); // Dispose previous dispatcher
+    dispatcher = new EventDispatcher('TestDispatcherBatch', {
+      maxQueueSize: 10,
+      overflowStrategy: 'drop_incoming',
+      batch: { maxBatchSize: 5, maxBatchDelay: 500, strategy: 'sequential' }, // Long delay to ensure buffering
+    });
+    dispatcher.markAsReady();
+
+    const handler = jest.fn();
+    dispatcher.subscribe('test.batch', handler);
+
+    const event1: BaseEvent = { id: 'b1', type: 'test.batch', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event2: BaseEvent = { id: 'b2', type: 'test.batch', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+    const event3: BaseEvent = { id: 'b3', type: 'test.batch', priority: EventPriority.NORMAL, status: EventStatus.PENDING };
+
+    await dispatcher.emitEvent(event1);
+    await dispatcher.emitEvent(event2);
+    await dispatcher.emitEvent(event3);
+
+    // Immediately check metrics, before the batch is processed (due to maxBatchDelay)
+    const metricsBeforeProcessing = dispatcher.getQueueMetrics();
+    expect(metricsBeforeProcessing.queueSize).toBe(3); // 3 events in the queue
+    expect(metricsBeforeProcessing.batchBacklog).toBe(0); // Batch backlog should be 0 because events are moved from internal batchBuffer to main queue after sort/compress
+    expect(metricsBeforeProcessing.totalProcessed).toBe(0);
+    expect(metricsBeforeProcessing.totalDropped).toBe(0);
+
+    // Wait for batch to be processed
+    await new Promise(resolve => setTimeout(resolve, 600));
+
+    const metricsAfterProcessing = dispatcher.getQueueMetrics();
+    expect(metricsAfterProcessing.queueSize).toBe(0);
+    expect(metricsAfterProcessing.batchBacklog).toBe(0);
+    expect(metricsAfterProcessing.totalProcessed).toBe(3);
+    expect(metricsAfterProcessing.totalDropped).toBe(0);
   });
 });
